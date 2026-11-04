@@ -3,7 +3,8 @@
 > **MADE BY - @TEAMDARK_OWNER**
 
 Android AI agent client — one APK, your own API key, any OpenAI-compatible provider.
-Dark UI, streaming replies, markdown, local chat history.
+Dark UI, streaming replies, markdown, local chat history — plus a built-in
+**image editor**, **music maker** and a **token/credits meter**.
 
 ## Download
 
@@ -14,6 +15,9 @@ Install → allow "install from unknown sources" → open → ⚙ → paste your
 
 ## Features
 
+- 🎨 **Image editor** — load a photo, brightness/contrast/saturation/blur, rotate/flip, brush, text, save as PNG
+- 🎵 **Music maker** — 16-step drum + melody sequencer, WebAudio preview, export a real `.wav`
+- ✦ **Token meter** — 1000 on first run, 300 daily, 50 per ad, premium codes; 1 token/message, 3 per web round
 - 🌐 **Web search agent** — model calls `web_search` / `open_url` itself, answers with source chips
 - 🔑 **Bring your own key** — Venice AI, OpenRouter, Groq, OpenAI, local Ollama, or any compatible endpoint
 - ⚡ **Streaming** replies (token by token)
@@ -54,14 +58,21 @@ Native code is intentionally tiny:
 | `Bridge.java` | native `POST`/`GET` with streaming lines → `window.__nativeEvent` |
 | `assets/index.html` | UI |
 | `assets/styles.css` | dark theme |
-| `assets/app.js` | chat logic, agent loop, SSE parsing, markdown, history |
+| `assets/app.js` | chat logic, agent loop, tabs, token hooks, SSE parsing, markdown, history |
 | `assets/tools.js` | `web_search` + `open_url` tools, HTML→text, DDG/Wikipedia parsing |
+| `assets/credits.js` | token ledger (`1000` start, `+300` daily, ads, premium codes) |
+| `assets/image.js` | canvas image editor (filters, brush, text, PNG export) |
+| `assets/music.js` | step sequencer + WAV encoder (16-bit PCM, no dependencies) |
 
-`app.js` and `tools.js` also run under node, so the core is tested without a device:
+Every asset except the DOM wiring runs under node, so the core is tested without a device:
 
 ```sh
 node tests/app.test.js
 node tests/tools.test.js
+node tests/features.test.js
+
+# optional UI smoke test (boots index.html in jsdom)
+npm i --no-save jsdom && node tests/dom.test.js
 ```
 
 ## Project layout
@@ -71,8 +82,8 @@ app/src/main/
 ├── AndroidManifest.xml
 ├── java/com/teamdark/darkagent/{MainActivity,Bridge}.java
 ├── res/{values,drawable}
-└── assets/{index.html,styles.css,app.js}
-tests/app.test.js
+└── assets/{index.html,styles.css,app.js,tools.js,credits.js,image.js,music.js}
+tests/{app,tools,features}.test.js
 .github/workflows/build.yml
 ```
 
@@ -85,6 +96,23 @@ Tap 🌐 in the composer to switch the agent on. Then the model can call two too
 
 Up to 4 tool rounds per message. Sources show up as chips under the answer.
 No extra API key needed for search — it goes through the native HTTP bridge.
+
+## Tabs
+
+| Tab | What it does |
+| --- | --- |
+| **Chat** | the agent; 🌐 enables `web_search` / `open_url` |
+| **Image** | pick a photo → filters, rotate/flip, brush, text → **Save PNG** (Downloads) |
+| **Music** | tap steps, ▶ Play, **Save WAV** (Downloads) |
+| **Credits** | balance, daily reward, ad bonus, premium code |
+
+## Tokens (honest version)
+
+The ledger lives in `localStorage`, so it is a **UX meter, not a paywall** —
+anyone with devtools can edit it. Real enforcement needs a server and Play
+Billing. Costs: 1 token per message, 3 per web-search round. Rewards: 1000 on
+first run, 300 daily, 50 per ad (1 h cooldown). Premium codes:
+`TEAMDARK-30` (30 days), `DARKFRIEND-7`, `WELCOME-3` — premium = no token spend.
 
 ## Troubleshooting
 
@@ -109,6 +137,9 @@ instead of hiding it, so copy that message if you're stuck.
 - Web search needs a model that supports tool calling (Venice, Groq, OpenRouter, OpenAI do).
 - Answers depend on the model you pick. Provider terms and content rules still apply.
 - Debug-signed APK (self-signed). Sideloading is required — it is not on Play Store.
+- The APK **cannot build other APKs** on the phone: Android has no JDK/SDK toolchain.
+  What is possible is having the app push a repo to GitHub and letting Actions build.
+- The token ledger and the ad screen are local/simulated — see the section above.
 
 ## License
 

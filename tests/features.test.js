@@ -1,0 +1,119 @@
+/* Node tests for the v2 features: credits ledger + music renderer. */
+const assert = require('assert');
+const path = require('path');
+
+const credits = require(path.join(__dirname, '..', 'app', 'src', 'main', 'assets', 'credits.js'));
+const music = require(path.join(__dirname, '..', 'app', 'src', 'main', 'assets', 'music.js'));
+
+// ------------------------------------------------------------------ credits
+{
+  let now = new Date('2026-11-05T10:00:00Z').getTime();
+  const clock = () => now;
+  const store = credits.memoryStore();
+  const c = credits.create(store, clock);
+
+  // first run -> 1000
+  assert.strictEqual(c.summary().balance, 1000);
+  assert.strictEqual(c.summary().canClaimDaily, false, 'fresh state starts claimed today');
+  assert.strictEqual(c.summary().premium, false);
+
+  // spend
+  assert.strictEqual(c.spend(1).ok, true);
+  assert.strictEqual(c.summary().balance, 999);
+
+  // daily is once per calendar day
+  now += 24 * 60 * 60 * 1000;
+  const daily = c.claimDaily();
+  assert.strictEqual(daily.ok, true);
+  assert.strictEqual(daily.gained, 300);
+  assert.strictEqual(c.claimDaily().ok, false, 'second claim same day must fail');
+  assert.strictEqual(c.summary().balance, 1299);
+
+  // insufficient funds
+  const broke = credits.create(credits.memoryStore(), clock);
+  broke.spend(1000);
+  const failed = broke.spend(5);
+  assert.strictEqual(failed.ok, false);
+  assert.strictEqual(failed.reason, 'insufficient');
+  assert.strictEqual(broke.summary().balance, 0);
+
+  // redeem -> premium, spending becomes free
+  const prem = credits.create(credits.memoryStore(), clock);
+  assert.strictEqual(prem.redeem('nope').ok, false);
+  const ok = prem.redeem('teamdark-30');
+  assert.strictEqual(ok.ok, true, 'codes are case-insensitive');
+  assert.strictEqual(ok.days, 30);
+  assert.strictEqual(prem.isPremium(), true);
+  const freeSpend = prem.spend(50);
+  assert.strictEqual(freeSpend.ok, true);
+  assert.strictEqual(freeSpend.free, true);
+  assert.strictEqual(prem.summary().balance, 1000, 'premium spend does not debit');
+  assert.strictEqual(prem.redeem('TEAMDARK-30').reason, 'used', 'a code cannot be reused');
+
+  // ad reward + cooldown
+  const ad = credits.create(credits.memoryStore(), clock);
+  assert.strictEqual(ad.adReady(), true);
+  const reward = ad.adReward();
+  assert.strictEqual(reward.ok, true);
+  assert.strictEqual(reward.gained, 50);
+  assert.strictEqual(ad.adReady(), false);
+  assert.strictEqual(ad.adReward().reason, 'cooldown');
+  now += 61 * 60 * 1000;
+  assert.strictEqual(ad.adReady(), true, 'cooldown expires after an hour');
+
+  // persistence round-trip through the same store
+  const again = credits.create(store, clock);
+  assert.ok(again.summary().balance > 0);
+
+  // dayStr padding
+  assert.strictEqual(credits.dayStr(new Date('2026-01-02T00:00:00Z').getTime()).length, 10);
+}
+
+// -------------------------------------------------------------------- music
+{
+  const empty = music.emptyGrid();
+  assert.deepStrictEqual(Object.keys(empty).sort(), ['hat', 'kick', 'mel', 'snare']);
+  assert.strictEqual(empty.kick.length, 16);
+
+  const silent = music.renderBar(96, empty);
+  assert.ok(silent.length > 0);
+  assert.strictEqual(silent.every((v) => v === 0), true, 'empty grid renders silence');
+
+  const g = music.emptyGrid();
+  g.kick[0] = 1;
+  g.snare[4] = 1;
+  g.mel[8] = 2;
+  const bar = music.renderBar(96, g);
+  assert.ok(bar.some((v) => v !== 0), 'hits must produce samples');
+  assert.ok(bar.every((v) => v >= -1 && v <= 1), 'samples are clamped');
+
+  // 16-bit mono WAV container
+  const wav = music.encodeWav(bar, 22050);
+  assert.strictEqual(String.fromCharCode(wav[0], wav[1], wav[2], wav[3]), 'RIFF');
+  assert.strictEqual(String.fromCharCode(wav[8], wav[9], wav[10], wav[11]), 'WAVE');
+  assert.strictEqual(String.fromCharCode(wav[12], wav[13], wav[14], wav[15]), 'fmt ');
+  assert.strictEqual(String.fromCharCode(wav[36], wav[37], wav[38], wav[39]), 'data');
+  assert.strictEqual(wav.length, 44 + bar.length * 2);
+
+  const view = new DataView(wav.buffer, wav.byteOffset, wav.byteLength);
+  assert.strictEqual(view.getUint32(4, true), wav.length - 8, 'RIFF chunk size');
+  assert.strictEqual(view.getUint16(22, true), 1, 'mono');
+  assert.strictEqual(view.getUint32(24, true), 22050, 'sample rate');
+  assert.strictEqual(view.getUint16(34, true), 16, 'bit depth');
+  assert.strictEqual(view.getUint32(40, true), bar.length * 2, 'data size');
+
+  // base64 for the native save path
+  const b64 = music.toBase64(wav.subarray(0, 64));
+  assert.strictEqual(typeof b64, 'string');
+  assert.strictEqual(b64, Buffer.from(wav.subarray(0, 64)).toString('base64'));
+
+  // faster tempo -> shorter bar
+  assert.ok(music.renderBar(160, g).length < music.renderBar(60, g).length);
+
+  // a song is just N bars
+  const song = music.renderSong(96, g, 4);
+  assert.strictEqual(song.length, bar.length * 4);
+  assert.deepStrictEqual(Array.from(song.subarray(0, 8)), Array.from(bar.subarray(0, 8)));
+}
+
+console.log('✓ credits + music tests passed');

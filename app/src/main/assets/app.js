@@ -717,6 +717,9 @@
     function runTool(calls, i) {
       if (i >= calls.length) return step();
       var call = calls[i];
+      if (!spendTokens(CREDITS ? CREDITS.COST.web_round : 3, true)) {
+        return finish('', 'tokens khatam — web round ke liye 3 tokens chahiye');
+      }
       hint(rounds > 1 ? 'reading…' : 'searching…');
       TOOLS_API.execute(call.name, call.args, httpGet, function (err, content, src) {
         for (var k = 0; k < (src || []).length; k++) addSource(sources, src[k]);
@@ -749,7 +752,150 @@
     step();
   }
 
-  function send(text) {
+
+  // ---------------------------------------------------------- tabs + tokens
+  var CREDITS = GLOBAL.DarkCredits || null;
+  var currentTab = 'chat';
+
+  function refreshTokens() {
+    if (!CREDITS) return;
+    var s;
+    try { s = CREDITS.summary(); } catch (e) { return; }
+
+    var chip = $('token-count');
+    if (chip) chip.textContent = s.premium ? '∞' : s.balance;
+    var btn = $('btn-tokens');
+    if (btn) btn.classList.toggle('premium', s.premium);
+
+    if ($('cr-balance')) {
+      $('cr-balance').textContent = s.balance;
+      $('cr-premium').textContent = s.premium ? 'premium · ' + s.premiumDays + 'd left' : 'free plan';
+      $('cr-stats').textContent = 'earned ' + s.totalEarned + ' · spent ' + s.totalSpent;
+      $('cr-daily').disabled = !s.canClaimDaily;
+      $('cr-daily-desc').textContent = s.canClaimDaily
+        ? '+' + s.daily + ' tokens aaj'
+        : 'aaj le liya — kal aana';
+      $('cr-ad').disabled = !s.adReady;
+      $('cr-ad-desc').textContent = s.adReady
+        ? '+' + s.adReward + ' tokens · 1h cooldown'
+        : 'cooldown — thodi der baad';
+    }
+  }
+
+  function crMsg(text, err) {
+    var el = $('cr-msg');
+    if (!el) return;
+    el.textContent = text;
+    el.className = 'note small' + (err ? ' err' : '');
+  }
+
+  function spendTokens(n, quiet) {
+    if (!CREDITS) return true;
+    var res = CREDITS.spend(n);
+    refreshTokens();
+    if (res.ok) return true;
+    if (!quiet) {
+      switchTab('credits');
+      hint('tokens khatam — daily reward lo ya ad dekho', true);
+    }
+    return false;
+  }
+
+  function switchTab(name) {
+    currentTab = name;
+
+    var tabs = document.querySelectorAll('.tab');
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].classList.toggle('on', tabs[i].getAttribute('data-tab') === name);
+    }
+
+    $('chat').classList.toggle('hidden', name !== 'chat');
+    $('composer').classList.toggle('hidden', name !== 'chat');
+
+    var panes = { image: 'view-image', music: 'view-music', credits: 'view-credits' };
+    Object.keys(panes).forEach(function (k) {
+      var el = $(panes[k]);
+      if (el) el.classList.toggle('hidden', k !== name);
+    });
+
+    if (name === 'credits') refreshTokens();
+  }
+
+  var adTimer = null;
+
+  function runAd() {
+    if (!CREDITS) return;
+    if (adTimer) return;
+
+    if (!CREDITS.adReady()) {
+      crMsg('ad cooldown chal raha hai — thodi der baad try karo', true);
+      return;
+    }
+
+    var btn = $('cr-ad');
+    var desc = $('cr-ad-desc');
+    var left = 3;
+
+    btn.disabled = true;
+    desc.textContent = 'ad playing… ' + left + 's';
+
+    adTimer = setInterval(function () {
+      left--;
+      if (left > 0) {
+        desc.textContent = 'ad playing… ' + left + 's';
+        return;
+      }
+      clearInterval(adTimer);
+      adTimer = null;
+      btn.disabled = false;
+      var res = CREDITS.adReward();
+      if (res.ok) crMsg('+' + res.gained + ' tokens mil gaye');
+      refreshTokens();
+    }, 1000);
+  }
+
+  function redeemCode() {
+    if (!CREDITS) return;
+    var input = $('cr-code');
+    var res = CREDITS.redeem(input.value);
+    if (res.ok) {
+      input.value = '';
+      crMsg('premium on — ' + res.days + ' din ke liye');
+    } else if (res.reason === 'used') {
+      crMsg('ye code pehle use ho chuka hai', true);
+    } else {
+      crMsg('code galat hai', true);
+    }
+    refreshTokens();
+  }
+
+  function wireCredits() {
+    if (!$('cr-daily')) return;
+
+    $('cr-daily').onclick = function () {
+      var res = CREDITS.claimDaily();
+      if (res.ok) crMsg('+' + res.gained + ' tokens aa gaye');
+      else crMsg('aaj ka reward le liya — kal aana', true);
+      refreshTokens();
+    };
+
+    $('cr-ad').onclick = runAd;
+    $('cr-redeem').onclick = redeemCode;
+    $('cr-code').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); redeemCode(); }
+    });
+  }
+
+  function send(text, opts) {
+    text = (text || '').trim();
+    if (busy || !text) return;
+    opts = opts || {};
+    if (!settings.key && !/localhost|127\.0\.0\.1/.test(settings.base)) {
+      openSettings();
+      hint('API key daalo pehle', true);
+      return;
+    }
+    if (!opts.freeTokens && !spendTokens(CREDITS ? CREDITS.COST.message : 1)) return;
     if (webEnabled()) return sendAgent(text);
     return sendStream(text);
   }
@@ -760,7 +906,7 @@
         var text = messages[i].content;
         messages = messages.slice(0, i);
         rebuild();
-        send(text);
+        send(text, { freeTokens: true });
         return;
       }
     }
@@ -974,6 +1120,11 @@
       hint(on ? 'web tools on — model search karega' : 'web tools off');
       setTimeout(function () { hint(''); }, 1600);
     };
+    Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (t) {
+      t.onclick = function () { switchTab(t.getAttribute('data-tab')); };
+    });
+    $('btn-tokens').onclick = function () { switchTab('credits'); };
+    wireCredits();
     $('btn-send').onclick = function () { send($('input').value); };
     $('btn-stop').onclick = stop;
 
@@ -1003,6 +1154,7 @@
   function boot() {
     $('btn-model').textContent = settings.model;
     setWebEnabled(webEnabled());
+    refreshTokens();
     wire();
     renderQuick();
     if (sessions.length && sessions[0].messages && sessions[0].messages.length) {

@@ -16,13 +16,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Node tests (core logic)
+      - name: Node tests
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
-      - name: Run core tests
-        run: node tests/app.test.js && node tests/tools.test.js
+      - name: Run tests
+        run: node tests/app.test.js && node tests/tools.test.js && node tests/features.test.js
+
+      - name: DOM smoke test (optional)
+        continue-on-error: true
+        run: |
+          npm i --no-save jsdom
+          node tests/dom.test.js
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4

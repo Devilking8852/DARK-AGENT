@@ -15,8 +15,16 @@
     <span class="brand">DARK AGENT</span>
     <button class="chip" id="btn-model">model</button>
   </div>
+  <button class="tokens" id="btn-tokens" title="Tokens">✦<span id="token-count">—</span></button>
   <button class="icon" id="btn-settings" aria-label="Settings">⚙</button>
 </header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab on" data-tab="chat">Chat</button>
+  <button class="tab" data-tab="image">Image</button>
+  <button class="tab" data-tab="music">Music</button>
+  <button class="tab" data-tab="credits">Credits</button>
+</nav>
 
 <main id="chat" class="chat">
   <section class="empty" id="empty">
@@ -27,7 +35,7 @@
   </section>
 </main>
 
-<div class="composer">
+<div class="composer" id="composer">
   <div class="composer-inner">
     <textarea id="input" rows="1" placeholder="Message DARK AGENT…" enterkeyhint="send"></textarea>
     <button id="btn-web" class="tool-toggle" aria-label="Web tools" title="Web search">🌐</button>
@@ -36,6 +44,116 @@
   </div>
   <div class="hint" id="hint"></div>
 </div>
+
+<!-- ============================ image editor ============================ -->
+<section id="view-image" class="pane aux hidden">
+  <div class="pane-head">
+    <h2>Image editor</h2>
+    <span class="pane-note" id="img-status"></span>
+  </div>
+
+  <div class="img-stage">
+    <div class="img-empty" id="img-empty">
+      <div class="empty-mark">▣</div>
+      <p>Photo chuno, phir filter / rotate / brush / text lagao.</p>
+      <label class="btn primary file-btn">
+        Open image
+        <input type="file" id="img-pick" accept="image/*" hidden />
+      </label>
+    </div>
+    <canvas id="img-canvas" class="hidden"></canvas>
+  </div>
+
+  <div class="controls hidden" id="img-tools">
+    <div class="row wrap">
+      <button class="btn sm" id="img-rotate">Rotate</button>
+      <button class="btn sm" id="img-flip">Flip H</button>
+      <button class="btn sm" id="img-flipv">Flip V</button>
+      <button class="btn sm" id="img-undo">Undo</button>
+      <button class="btn sm primary" id="img-save">Save PNG</button>
+    </div>
+
+    <label class="slider">Brightness <input id="i-bright" type="range" min="20" max="200" value="100" /></label>
+    <label class="slider">Contrast <input id="i-contrast" type="range" min="20" max="200" value="100" /></label>
+    <label class="slider">Saturation <input id="i-saturate" type="range" min="0" max="220" value="100" /></label>
+    <label class="slider">Blur <input id="i-blur" type="range" min="0" max="10" value="0" /></label>
+
+    <div class="row">
+      <button class="btn sm" id="i-brush-on">Brush</button>
+      <input id="i-brush" type="range" min="2" max="40" value="6" aria-label="Brush size" />
+    </div>
+
+    <div class="row">
+      <input id="img-text" placeholder="Text to add" autocapitalize="sentences" />
+      <button class="btn sm" id="img-text-add">Add</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ music maker ============================ -->
+<section id="view-music" class="pane aux hidden">
+  <div class="pane-head">
+    <h2>Music maker</h2>
+    <span class="pane-note" id="music-status"></span>
+  </div>
+
+  <div class="row wrap">
+    <button class="btn sm primary" id="btn-play">▶ Play</button>
+    <button class="btn sm" id="btn-demo">Demo</button>
+    <button class="btn sm" id="btn-clear">Clear</button>
+    <button class="btn sm" id="btn-wav">Save WAV</button>
+  </div>
+
+  <label class="slider bpm">
+    <span id="bpm-label">96 BPM</span>
+    <input id="music-bpm" type="range" min="60" max="170" value="96" />
+  </label>
+
+  <div id="music-grid" class="music-grid"></div>
+  <p class="note small">Cell tap karo on/off ke liye. Melody row pe tap karne se note badalta hai. 16 steps = 1 bar.</p>
+</section>
+
+<!-- ============================== credits =============================== -->
+<section id="view-credits" class="pane aux hidden">
+  <div class="balance-card">
+    <span class="balance-label">TOKENS</span>
+    <span class="balance-value" id="cr-balance">—</span>
+    <span class="balance-sub" id="cr-premium">free plan</span>
+    <span class="balance-stats" id="cr-stats"></span>
+  </div>
+
+  <div class="cr-grid">
+    <button class="cr-card" id="cr-daily">
+      <span class="cr-title">Daily reward</span>
+      <span class="cr-desc" id="cr-daily-desc">+300 tokens / day</span>
+    </button>
+    <button class="cr-card" id="cr-ad">
+      <span class="cr-title">Watch a short ad</span>
+      <span class="cr-desc" id="cr-ad-desc">+50 tokens · 1h cooldown</span>
+    </button>
+  </div>
+
+  <div class="cr-box">
+    <h3>Premium</h3>
+    <p class="note">Code redeem karo — 30 din unlimited chat, tokens nahi katenge.</p>
+    <div class="row">
+      <input id="cr-code" placeholder="TEAMDARK-30" autocapitalize="characters" autocorrect="off" spellcheck="false" />
+      <button class="btn ghost" id="cr-redeem">Redeem</button>
+    </div>
+    <p class="note small" id="cr-msg"></p>
+  </div>
+
+  <div class="cr-box">
+    <h3>How tokens work</h3>
+    <p class="note small">
+      1 token per message · 3 tokens per web-search round · 1000 on first run ·
+      300 daily · 50 per ad. Stored on this device only, so treat it as a meter,
+      not a paywall.
+    </p>
+  </div>
+
+  <p class="note small credit-line">MADE BY - @TEAMDARK_OWNER</p>
+</section>
 
 <!-- settings sheet -->
 <div class="sheet-wrap hidden" id="settings-wrap">
@@ -99,6 +217,9 @@
 </div>
 
 <script src="tools.js"></script>
+<script src="credits.js"></script>
+<script src="image.js"></script>
+<script src="music.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

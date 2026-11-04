@@ -1,11 +1,19 @@
 package com.teamdark.darkagent;
 
+import android.content.ContentValues;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Environment;
+import android.provider.MediaStore;
+import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -165,6 +173,47 @@ public class Bridge {
         HttpURLConnection conn = live.remove(id);
         if (conn != null) {
             conn.disconnect();
+        }
+    }
+
+    /**
+     * Save a base64 blob (PNG / WAV exported from the editor screens).
+     * API 29+ goes to the shared Downloads folder via MediaStore, older
+     * devices fall back to the app's external files dir. Returns a human
+     * readable location, or "error: ..." so JS can show something.
+     */
+    @JavascriptInterface
+    public String saveBase64(String name, String mime, String b64) {
+        try {
+            byte[] bytes = Base64.decode(b64, Base64.DEFAULT);
+
+            if (Build.VERSION.SDK_INT >= 29) {
+                ContentValues cv = new ContentValues();
+                cv.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+                cv.put(MediaStore.MediaColumns.MIME_TYPE, mime);
+                cv.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+
+                Uri uri = web.getContext().getContentResolver()
+                        .insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
+                if (uri != null) {
+                    OutputStream out = web.getContext().getContentResolver().openOutputStream(uri);
+                    if (out != null) {
+                        out.write(bytes);
+                        out.close();
+                        return Environment.DIRECTORY_DOWNLOADS + "/" + name;
+                    }
+                }
+            }
+
+            File dir = web.getContext().getExternalFilesDir(null);
+            if (dir == null) dir = web.getContext().getFilesDir();
+            File file = new File(dir, name);
+            FileOutputStream fos = new FileOutputStream(file);
+            fos.write(bytes);
+            fos.close();
+            return file.getAbsolutePath();
+        } catch (Exception e) {
+            return "error: " + e.getMessage();
         }
     }
 
