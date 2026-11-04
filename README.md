@@ -104,7 +104,15 @@ No extra API key needed for search — it goes through the native HTTP bridge.
 | **Chat** | the agent; 🌐 enables `web_search` / `open_url` |
 | **Image** | pick a photo → filters, rotate/flip, brush, text → **Save PNG** (Downloads) |
 | **Music** | tap steps, ▶ Play, **Save WAV** (Downloads) |
-| **Credits** | balance, daily reward, ad bonus, premium code |
+| **Credits** | balance, daily reward, ad bonus, buy premium (Telegram), redeem code |
+
+## Buy premium
+
+The **Credits** tab has two buy buttons (₹49 / month, ₹399 / year). Both open
+**Telegram → [@TEAMDARK_OWNER](https://t.me/TEAMDARK_OWNER)** with the plan
+already written in the message, so payment + code happen in one chat. No store,
+no card details inside the app. Links go through `Native.openUrl` (system
+handler), so the Telegram app opens directly when installed.
 
 ## Tokens (honest version)
 

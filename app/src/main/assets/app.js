@@ -782,6 +782,23 @@
     }
   }
 
+  /** Open a link in the system browser / Telegram app. */
+  function openExternal(url) {
+    if (GLOBAL.Native && GLOBAL.Native.openUrl) {
+      try { GLOBAL.Native.openUrl(url); return; } catch (e) { /* fall through */ }
+    }
+    if (GLOBAL.open) GLOBAL.open(url, '_blank');
+    else GLOBAL.location.href = url;
+  }
+
+  var TELEGRAM = 'https://t.me/TEAMDARK_OWNER';
+
+  function buyURL(plan) {
+    var text = 'Hi TEAMDARK_OWNER, mujhe DARK AGENT Premium chahiye — ' + plan +
+      '. Payment kaise karun?';
+    return TELEGRAM + '?text=' + encodeURIComponent(text);
+  }
+
   function crMsg(text, err) {
     var el = $('cr-msg');
     if (!el) return;
@@ -881,6 +898,10 @@
 
     $('cr-ad').onclick = runAd;
     $('cr-redeem').onclick = redeemCode;
+
+    Array.prototype.forEach.call(document.querySelectorAll('[data-buy]'), function (b) {
+      b.onclick = function () { openExternal(buyURL(b.getAttribute('data-buy'))); };
+    });
     $('cr-code').addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { e.preventDefault(); redeemCode(); }
     });
@@ -1145,7 +1166,7 @@
       var a = e.target && e.target.closest ? e.target.closest('a') : null;
       if (a && a.href && a.target === '_blank') {
         e.preventDefault();
-        GLOBAL.open ? GLOBAL.open(a.href, '_blank') : (GLOBAL.location.href = a.href);
+        openExternal(a.href);
       }
     });
   }

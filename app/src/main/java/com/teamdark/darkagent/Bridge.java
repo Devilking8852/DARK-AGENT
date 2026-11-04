@@ -1,6 +1,7 @@
 package com.teamdark.darkagent;
 
 import android.content.ContentValues;
+import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
@@ -182,6 +183,18 @@ public class Bridge {
      * devices fall back to the app's external files dir. Returns a human
      * readable location, or "error: ..." so JS can show something.
      */
+    /** Open t.me / payment / support links in the matching app or browser. */
+    @JavascriptInterface
+    public void openUrl(String url) {
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            web.getContext().startActivity(intent);
+        } catch (Exception ignored) {
+            // no browser / bad url -> nothing to do
+        }
+    }
+
     @JavascriptInterface
     public String saveBase64(String name, String mime, String b64) {
         try {

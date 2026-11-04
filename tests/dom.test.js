@@ -27,6 +27,10 @@ const { window } = dom;
 const errors = [];
 window.addEventListener('error', (e) => errors.push(String(e.message)));
 
+// pretend to be the Android bridge so external-link clicks are observable
+const opened = [];
+window.Native = { openUrl: (u) => opened.push(u) };
+
 for (const f of ['tools.js', 'credits.js', 'image.js', 'music.js', 'app.js']) {
   window.eval(fs.readFileSync(path.join(root, f), 'utf8'));
 }
@@ -69,6 +73,18 @@ assert.strictEqual($('token-count').textContent, '∞');
 $('cr-code').value = 'nope';
 click($('cr-redeem'));
 assert.ok($('cr-msg').textContent.includes('galat'), 'bad code is rejected');
+
+// --------------------------------------------------------------- buy -> telegram
+const buy = doc.querySelectorAll('[data-buy]');
+assert.strictEqual(buy.length, 2, 'monthly + yearly buy buttons');
+click(buy[0]);
+click(buy[1]);
+assert.strictEqual(opened.length, 2, 'both buttons open an external link');
+opened.forEach((u) => {
+  assert.ok(u.startsWith('https://t.me/TEAMDARK_OWNER'), 'goes to the owner telegram, got ' + u);
+  assert.ok(u.indexOf('text=') !== -1, 'prefilled message');
+});
+assert.ok(decodeURIComponent(opened[1]).includes('₹399'), 'yearly plan is in the message');
 
 // ----------------------------------------------------------------------- music
 clickTab('music');

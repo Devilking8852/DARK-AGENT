@@ -762,3 +762,29 @@ input[type="range"] {
   letter-spacing: 0.1em;
   opacity: 0.7;
 }
+
+.cr-box.buy { border-color: #332a5e; background: linear-gradient(180deg, rgba(124,92,255,0.10), transparent 70%), var(--panel); }
+
+.buy-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.buy-btn:active { transform: scale(0.985); }
+
+.buy-plan { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; }
+
+.buy-price { font-size: 18px; font-weight: 800; color: var(--accent-2); }
+
+.buy-price small { font-size: 11px; font-weight: 500; color: var(--muted); }
+
+.tg-line { text-align: center; }
+.tg { color: var(--accent-2); font-weight: 600; }
