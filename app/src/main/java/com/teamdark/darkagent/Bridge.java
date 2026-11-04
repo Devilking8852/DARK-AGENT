@@ -106,6 +106,60 @@ public class Bridge {
         }).start();
     }
 
+    /** GET a URL (search engines, docs pages) and stream the body lines back. */
+    @JavascriptInterface
+    public void get(final String id, final String urlStr, final String headersJson) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                HttpURLConnection conn = null;
+                try {
+                    conn = (HttpURLConnection) new URL(urlStr).openConnection();
+                    conn.setRequestMethod("GET");
+                    conn.setConnectTimeout(20000);
+                    conn.setReadTimeout(30000);
+                    conn.setInstanceFollowRedirects(true);
+                    conn.setRequestProperty("User-Agent",
+                            "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36");
+                    conn.setRequestProperty("Accept", "text/html,application/json;q=0.9,*/*;q=0.8");
+
+                    JSONObject headers = new JSONObject(headersJson == null ? "{}" : headersJson);
+                    for (Iterator<String> it = headers.keys(); it.hasNext(); ) {
+                        String key = it.next();
+                        conn.setRequestProperty(key, headers.getString(key));
+                    }
+
+                    live.put(id, conn);
+                    int status = conn.getResponseCode();
+                    emit(new JSONObject().put("id", id).put("type", "status").put("status", status).toString());
+
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(
+                            status >= 400 ? conn.getErrorStream() : conn.getInputStream(), "UTF-8"));
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        emit(new JSONObject().put("id", id).put("type", "line").put("line", line).toString());
+                    }
+                    reader.close();
+
+                    emit(new JSONObject().put("id", id).put("type", "done").toString());
+                } catch (Exception e) {
+                    try {
+                        emit(new JSONObject()
+                                .put("id", id)
+                                .put("type", "error")
+                                .put("message", String.valueOf(e.getMessage()))
+                                .toString());
+                    } catch (Exception ignored) {
+                        // nothing else we can do
+                    }
+                } finally {
+                    live.remove(id);
+                    if (conn != null) conn.disconnect();
+                }
+            }
+        }).start();
+    }
+
     @JavascriptInterface
     public void abort(String id) {
         HttpURLConnection conn = live.remove(id);

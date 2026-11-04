@@ -14,6 +14,7 @@ Install → allow "install from unknown sources" → open → ⚙ → paste your
 
 ## Features
 
+- 🌐 **Web search agent** — model calls `web_search` / `open_url` itself, answers with source chips
 - 🔑 **Bring your own key** — Venice AI, OpenRouter, Groq, OpenAI, local Ollama, or any compatible endpoint
 - ⚡ **Streaming** replies (token by token)
 - 🧠 **Model picker** — loads the provider's model list (`/models`)
@@ -50,15 +51,17 @@ Native code is intentionally tiny:
 | File | Role |
 | --- | --- |
 | `MainActivity.java` | WebView shell (no AndroidX, no Compose) |
-| `Bridge.java` | native `POST` with streaming lines → `window.__nativeEvent` |
+| `Bridge.java` | native `POST`/`GET` with streaming lines → `window.__nativeEvent` |
 | `assets/index.html` | UI |
 | `assets/styles.css` | dark theme |
-| `assets/app.js` | chat logic, SSE parsing, markdown, history |
+| `assets/app.js` | chat logic, agent loop, SSE parsing, markdown, history |
+| `assets/tools.js` | `web_search` + `open_url` tools, HTML→text, DDG/Wikipedia parsing |
 
-`app.js` also runs under node, so the core is tested without a device:
+`app.js` and `tools.js` also run under node, so the core is tested without a device:
 
 ```sh
 node tests/app.test.js
+node tests/tools.test.js
 ```
 
 ## Project layout
@@ -73,11 +76,22 @@ tests/app.test.js
 .github/workflows/build.yml
 ```
 
+## Web search
+
+Tap 🌐 in the composer to switch the agent on. Then the model can call two tools:
+
+- `web_search` — DuckDuckGo Lite, falling back to the Wikipedia API
+- `open_url` — fetch a page and read it as text (6k chars, scripts stripped)
+
+Up to 4 tool rounds per message. Sources show up as chips under the answer.
+No extra API key needed for search — it goes through the native HTTP bridge.
+
 ## Limits (honest notes)
 
 - This is a **client**, not a sandbox escape: Android apps can't run shell commands
   or touch other apps' files without root. So it can't behave like a full
   terminal coding agent.
+- Web search needs a model that supports tool calling (Venice, Groq, OpenRouter, OpenAI do).
 - Answers depend on the model you pick. Provider terms and content rules still apply.
 - Debug-signed APK (self-signed). Sideloading is required — it is not on Play Store.
 

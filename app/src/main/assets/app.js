@@ -19,6 +19,9 @@
     { id: 'custom', name: 'Custom', base: '', model: '' }
   ];
 
+  var TOOLS_API = GLOBAL.DarkTools || { TOOLS: [], parseToolCalls: function () { return []; } };
+  var STORE_WEB = 'darkagent.web.v1';
+
   var DEFAULTS = {
     base: 'https://api.venice.ai/api/v1',
     key: '',
@@ -361,7 +364,7 @@
   }
 
   // ------------------------------------------------------------------- chat
-  function send(text) {
+  function sendStream(text) {
     if (busy) return;
     text = (text || '').trim();
     if (!text) return;
@@ -481,6 +484,213 @@
         if (gotAny) hint('');
       }
     );
+  }
+
+  // ------------------------------------------------------------ agent + tools
+  function webEnabled() {
+    try { return localStorage.getItem(STORE_WEB) === '1'; } catch (e) { return false; }
+  }
+
+  function setWebEnabled(on) {
+    try { localStorage.setItem(STORE_WEB, on ? '1' : '0'); } catch (e) { /* ignore */ }
+    var b = $('btn-web');
+    if (b) b.classList.toggle('on', on);
+  }
+
+  function authHeaders() {
+    return {
+      'Authorization': 'Bearer ' + settings.key,
+      'Content-Type': 'application/json'
+    };
+  }
+
+  function chatURL() { return trimSlash(settings.base) + '/chat/completions'; }
+
+  /** POST and collect the whole body (used for tool rounds / model lists). */
+  function postJSON(url, headers, body, cb) {
+    var buf = '';
+    return postStream(url, headers, body, function (line) { buf += line; }, function (res) {
+      if (!res.ok) return cb({ ok: false, error: res.aborted ? 'stopped' : (res.error || 'request failed') });
+      try { cb({ ok: true, data: JSON.parse(buf) }); }
+      catch (e) { cb({ ok: false, error: 'bad JSON: ' + e.message }); }
+    });
+  }
+
+  /** GET a URL as text (native bridge first, fetch as fallback). */
+  function httpGet(url, cb) {
+    var id = 'g' + (++seq) + Date.now().toString(36);
+    var buf = '';
+    var finished = false;
+
+    function end(err, text) {
+      if (finished) return;
+      finished = true;
+      delete eventHandlers[id];
+      cb(err, text || '');
+    }
+
+    eventHandlers[id] = function (ev) {
+      if (ev.type === 'line') buf += ev.line + '\n';
+      if (ev.type === 'error') end(new Error(ev.message || 'network error'));
+      if (ev.type === 'done') end(null, buf);
+    };
+
+    if (GLOBAL.Native && GLOBAL.Native.get) {
+      try { GLOBAL.Native.get(id, url, '{}'); } catch (e) { end(new Error(String(e))); }
+      return;
+    }
+
+    fetch(url, { redirect: 'follow' })
+      .then(function (r) { return r.text(); })
+      .then(function (t) { end(null, t); })
+      .catch(function (e) { end(new Error(String(e && e.message || e))); });
+  }
+
+  function toolPayload(convo) {
+    var msgs = convo.filter(function (m) { return m.role !== 'system'; });
+    if (settings.sys) msgs = [{ role: 'system', content: settings.sys }].concat(msgs);
+    return {
+      model: settings.model,
+      messages: msgs,
+      tools: TOOLS_API.TOOLS,
+      tool_choice: 'auto',
+      temperature: Number(settings.temp),
+      max_tokens: Number(settings.max),
+      stream: false
+    };
+  }
+
+  function addSource(list, src) {
+    if (!src || !src.url) return;
+    for (var i = 0; i < list.length; i++) if (list[i].url === src.url) return;
+    list.push(src);
+  }
+
+  function renderSources(sources) {
+    if (!sources || !sources.length) return '';
+    var html = '<div class="sources"><span class="sources-label">sources</span>';
+    for (var i = 0; i < sources.length; i++) {
+      var s = sources[i];
+      var label = (s.title || s.url).slice(0, 42);
+      html += '<a class="source" href="' + esc(s.url) + '" target="_blank" rel="noopener">' + esc(label) + '</a>';
+    }
+    return html + '</div>';
+  }
+
+  function attachMeta(bubble, startedAt, content, msgIndex) {
+    var meta = document.createElement('div');
+    meta.className = 'meta';
+
+    var t = document.createElement('span');
+    var secs = ((Date.now() - startedAt) / 1000).toFixed(1);
+    t.textContent = nowTime() + ' · ' + secs + 's · ' + bytes(content.length);
+
+    var copy = document.createElement('button');
+    copy.textContent = 'copy';
+    copy.onclick = function () {
+      if (navigator.clipboard) navigator.clipboard.writeText(content);
+      copy.textContent = 'copied';
+      setTimeout(function () { copy.textContent = 'copy'; }, 1200);
+    };
+
+    var retry = document.createElement('button');
+    retry.textContent = 'retry';
+    retry.onclick = function () {
+      messages = messages.slice(0, msgIndex);
+      resendLast();
+    };
+
+    meta.appendChild(t);
+    meta.appendChild(copy);
+    meta.appendChild(retry);
+    bubble.parentNode.appendChild(meta);
+  }
+
+  function sendAgent(text) {
+    if (busy) return;
+    if (!settings.key && !/localhost|127\.0\.0\.1/.test(settings.base)) {
+      openSettings();
+      hint('API key daalo pehle', true);
+      return;
+    }
+
+    var input = $('input');
+    input.value = '';
+    input.style.height = 'auto';
+
+    messages.push({ role: 'user', content: text });
+    addMessageEl('user', text);
+    persistSession();
+
+    var bubble = addMessageEl('assistant', '');
+    bubble.innerHTML = '<span class="cursor"></span>';
+    setBusy(true);
+    hint('thinking…');
+
+    var convo = messages.slice();
+    var sources = [];
+    var rounds = 0;
+    var started = Date.now();
+    var maxRounds = 4;
+
+    function finish(content, err) {
+      currentReq = null;
+      setBusy(false);
+      if (err && !content) {
+        bubble.innerHTML = '<span style="color:var(--muted)">' + esc(err) + '</span>';
+        hint(err, true);
+        return;
+      }
+      if (!content) {
+        bubble.innerHTML = '<span style="color:var(--muted)">no response</span>';
+        return;
+      }
+      messages.push({ role: 'assistant', content: content });
+      bubble.innerHTML = renderMarkdown(content) + renderSources(sources);
+      attachMeta(bubble, started, content, messages.length - 1);
+      persistSession();
+      scrollDown(true);
+      hint('');
+    }
+
+    function runTool(calls, i) {
+      if (i >= calls.length) return step();
+      var call = calls[i];
+      hint(rounds > 1 ? 'reading…' : 'searching…');
+      TOOLS_API.execute(call.name, call.args, httpGet, function (err, content, src) {
+        for (var k = 0; k < (src || []).length; k++) addSource(sources, src[k]);
+        convo.push({
+          role: 'tool',
+          tool_call_id: call.id,
+          content: err ? ('error: ' + err.message) : content
+        });
+        runTool(calls, i + 1);
+      });
+    }
+
+    function step() {
+      if (rounds >= maxRounds) return finish('', 'tool limit reached');
+      rounds++;
+      hint(rounds === 1 ? 'thinking…' : 'writing…');
+      currentReq = postJSON(chatURL(), authHeaders(), toolPayload(convo), function (res) {
+        if (!res.ok) return finish('', res.error || 'request failed');
+        var msg = res.data && res.data.choices && res.data.choices[0] && res.data.choices[0].message;
+        if (!msg) return finish('', 'empty response');
+
+        var calls = TOOLS_API.parseToolCalls(msg);
+        if (!calls.length) return finish(msg.content || '', null);
+
+        convo.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls });
+        runTool(calls, 0);
+      });
+    }
+
+    step();
+  }
+
+  function send(text) {
+    if (webEnabled()) return sendAgent(text);
+    return sendStream(text);
   }
 
   function resendLast() {
@@ -678,6 +888,12 @@
       el.onclick = function () { closeSheet(el.getAttribute('data-close')); };
     });
 
+    $('btn-web').onclick = function () {
+      var on = !webEnabled();
+      setWebEnabled(on);
+      hint(on ? 'web tools on — model search karega' : 'web tools off');
+      setTimeout(function () { hint(''); }, 1600);
+    };
     $('btn-send').onclick = function () { send($('input').value); };
     $('btn-stop').onclick = stop;
 
@@ -706,6 +922,7 @@
   // ------------------------------------------------------------------- boot
   function boot() {
     $('btn-model').textContent = settings.model;
+    setWebEnabled(webEnabled());
     wire();
     renderQuick();
     if (sessions.length && sessions[0].messages && sessions[0].messages.length) {
