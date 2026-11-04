@@ -92,9 +92,10 @@ No extra API key needed for search — it goes through the native HTTP bridge.
 | --- | --- |
 | `HTTP 402: Insufficient USD or Diem balance` | Venice account has no credits — top up or switch provider |
 | `HTTP 401` | wrong API key |
-| `HTTP 404` | wrong base URL (a trailing `/v1` is required) or wrong model id |
+| `HTTP 404` | wrong base URL (a trailing `/v1` is required) or a retired model id — tap **Load** in Settings to list the ones your key can use |
 | `empty response` | model returned no text — usually a non-chat model id or a tool-only reply |
 | reasoning models show text late | the app also accepts `reasoning_content` deltas |
+| model list empty | tap **Load** (needs a valid key); the dropdown shows real ids |
 | web tools do nothing | the model doesn't support tool calling — 🌐 needs Venice/Groq/OpenRouter/OpenAI |
 
 Since v1.2.0 the app shows the provider's real error text in the chat bubble

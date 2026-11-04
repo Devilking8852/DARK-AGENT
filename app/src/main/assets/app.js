@@ -12,8 +12,8 @@
 
   var PRESETS = [
     { id: 'venice', name: 'Venice AI', base: 'https://api.venice.ai/api/v1', model: 'venice-uncensored-1-2' },
-    { id: 'openrouter', name: 'OpenRouter', base: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-chat' },
-    { id: 'groq', name: 'Groq', base: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
+    { id: 'openrouter', name: 'OpenRouter', base: 'https://openrouter.ai/api/v1', model: 'google/gemma-4-31b-it:free' },
+    { id: 'groq', name: 'Groq', base: 'https://api.groq.com/openai/v1', model: 'openai/gpt-oss-120b' },
     { id: 'openai', name: 'OpenAI', base: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
     { id: 'ollama', name: 'Ollama (local)', base: 'http://127.0.0.1:11434/v1', model: 'qwen2.5:0.5b' },
     { id: 'custom', name: 'Custom', base: '', model: '' }
@@ -577,7 +577,8 @@
   }
 
   /** GET a URL as text (native bridge first, fetch as fallback). */
-  function httpGet(url, cb) {
+  function httpGet(url, headers, cb) {
+    if (typeof headers === 'function') { cb = headers; headers = {}; }
     var id = 'g' + (++seq) + Date.now().toString(36);
     var buf = '';
     var finished = false;
@@ -596,11 +597,11 @@
     };
 
     if (GLOBAL.Native && GLOBAL.Native.get) {
-      try { GLOBAL.Native.get(id, url, '{}'); } catch (e) { end(new Error(String(e))); }
+      try { GLOBAL.Native.get(id, url, JSON.stringify(headers || {})); } catch (e) { end(new Error(String(e))); }
       return;
     }
 
-    fetch(url, { redirect: 'follow' })
+    fetch(url, { redirect: 'follow', headers: headers || {} })
       .then(function (r) { return r.text(); })
       .then(function (t) { end(null, t); })
       .catch(function (e) { end(new Error(String(e && e.message || e))); });
@@ -871,38 +872,51 @@
     status.textContent = 'Loading…';
     status.className = 'note';
 
-    var url = base + '/models';
     var headers = key ? { 'Authorization': 'Bearer ' + key } : {};
-    var done = false;
-    var buf = '';
 
-    postStream(url, headers, {}, function (line) {
-      if (line) buf += line;
-    }, function (res) {
-      done = true;
-      if (!res.ok) {
-        status.textContent = 'Failed: ' + (res.error || 'error');
+    httpGet(base + '/models', headers, function (err, body) {
+      if (err) {
+        status.textContent = 'Failed: ' + err.message;
         status.className = 'note err';
         return;
       }
+      var list;
       try {
-        var data = JSON.parse(buf);
-        var list = data.data || data.models || [];
-        var dl = $('model-list');
-        dl.innerHTML = '';
-        list.forEach(function (m) {
-          var id = m.id || m.name;
-          if (!id) return;
-          var opt = document.createElement('option');
-          opt.value = id;
-          dl.appendChild(opt);
-        });
-        status.textContent = list.length + ' models mil gaye — model field me tap karo';
-        status.className = 'note';
+        var data = JSON.parse(body);
+        list = data.data || data.models || [];
       } catch (e) {
-        status.textContent = 'Parse error: ' + e.message;
+        status.textContent = 'Parse error — check the base URL (needs /v1)';
         status.className = 'note err';
+        return;
       }
+
+      var dl = $('model-list');
+      var sel = $('s-model-select');
+      dl.innerHTML = '';
+      sel.innerHTML = '';
+
+      list.forEach(function (m) {
+        var id = m.id || m.name;
+        if (!id) return;
+        var opt = document.createElement('option');
+        opt.value = id;
+        dl.appendChild(opt);
+        var o2 = document.createElement('option');
+        o2.value = id;
+        o2.textContent = id;
+        sel.appendChild(o2);
+      });
+
+      if (!list.length) {
+        status.textContent = 'Koi model nahi mila (key / base URL check karo)';
+        status.className = 'note err';
+        return;
+      }
+
+      sel.classList.remove('hidden');
+      if ($('s-model').value) sel.value = $('s-model').value;
+      status.textContent = list.length + ' models — dropdown se pick karo';
+      status.className = 'note';
     });
   }
 
@@ -920,6 +934,9 @@
       if (!p || !p.base) return;
       $('s-base').value = p.base;
       if (p.model) $('s-model').value = p.model;
+      var sel2 = $('s-model-select');
+      sel2.innerHTML = '';
+      sel2.classList.add('hidden');
     };
 
     $('btn-settings').onclick = openSettings;
@@ -930,6 +947,9 @@
     $('btn-menu').onclick = function () { renderChatList(); $('chats-wrap').classList.remove('hidden'); };
     $('btn-new').onclick = newChat;
     $('btn-load-models').onclick = loadModels;
+    $('s-model-select').onchange = function () {
+      $('s-model').value = this.value;
+    };
     $('btn-save').onclick = function () {
       settings.base = trimSlash($('s-base').value) || DEFAULTS.base;
       settings.key = $('s-key').value.trim();
