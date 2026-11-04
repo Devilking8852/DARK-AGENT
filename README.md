@@ -104,15 +104,39 @@ No extra API key needed for search — it goes through the native HTTP bridge.
 | **Chat** | the agent; 🌐 enables `web_search` / `open_url` |
 | **Image** | pick a photo → filters, rotate/flip, brush, text → **Save PNG** (Downloads) |
 | **Music** | tap steps, ▶ Play, **Save WAV** (Downloads) |
-| **Credits** | balance, daily reward, ad bonus, buy premium (Telegram), redeem code |
+| **Credits** | balance, 4 premium plans (Buy now → Telegram), daily reward, ad bonus, redeem code, owner panel |
 
-## Buy premium
+## Premium plans
 
-The **Credits** tab has two buy buttons (₹49 / month, ₹399 / year). Both open
+| Plan | Price | Premium |
+| --- | --- | --- |
+| 1 month | ₹89 | 30 days |
+| 3 months | ₹150 | 90 days |
+| 6 months | ₹350 | 180 days |
+| 1 year | ₹600 | 365 days |
+
+Each card has a **Buy now** button that opens
 **Telegram → [@TEAMDARK_OWNER](https://t.me/TEAMDARK_OWNER)** with the plan
 already written in the message, so payment + code happen in one chat. No store,
 no card details inside the app. Links go through `Native.openUrl` (system
 handler), so the Telegram app opens directly when installed.
+
+Premium = unlimited chat, no token spend (daily + ad rewards still work).
+
+## Redeem panel (owner)
+
+Tap **MADE BY - @TEAMDARK_OWNER** at the bottom of the Credits tab **7 times**,
+enter the panel PIN, then:
+
+1. pick a plan, tap **Generate code**
+2. **Copy** the code, or **Copy + message** to get a ready-to-paste Telegram text
+3. the generated list keeps the last 60 codes
+
+Codes look like `DA-M3-8QKRU-41D96`: plan + random block + signature. They are
+checked offline, so no server is needed — but that also means a determined user
+who reads `credits.js` could forge one, and a code can be redeemed on more than
+one device. Treat this as a shop counter, not a payment vault. Real enforcement
+is a backend (see `Limits`).
 
 ## Tokens (honest version)
 
@@ -147,7 +171,7 @@ instead of hiding it, so copy that message if you're stuck.
 - Debug-signed APK (self-signed). Sideloading is required — it is not on Play Store.
 - The APK **cannot build other APKs** on the phone: Android has no JDK/SDK toolchain.
   What is possible is having the app push a repo to GitHub and letting Actions build.
-- The token ledger and the ad screen are local/simulated — see the section above.
+- The token ledger, the redeem codes and the ad screen are local/simulated — see above.
 
 ## License
 

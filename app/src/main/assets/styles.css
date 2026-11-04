@@ -788,3 +788,85 @@ input[type="range"] {
 
 .tg-line { text-align: center; }
 .tg { color: var(--accent-2); font-weight: 600; }
+
+/* ------------------------------------------------------- premium plan grid */
+.plan-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.plan-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+}
+
+.plan-card .plan-name { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; }
+.plan-card .plan-price { font-size: 20px; font-weight: 800; color: var(--accent-2); }
+.plan-card .plan-days { font-size: 10.5px; color: var(--muted); }
+.plan-card .buy-now { margin-top: 8px; width: 100%; }
+
+.credit-line { cursor: pointer; user-select: none; }
+
+/* ------------------------------------------------------------ owner panel */
+.panel-out {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid #332a5e;
+  background: rgba(124, 92, 255, 0.08);
+}
+
+#panel-code {
+  font-family: ui-monospace, "Roboto Mono", monospace;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-align: center;
+  color: var(--accent-2);
+}
+
+.panel-h3 {
+  margin: 4px 0 0;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.code-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.code-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+}
+
+.code-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, "Roboto Mono", monospace;
+  font-size: 11.5px;
+  color: var(--accent-2);
+}
+
+.code-meta { flex: 0 0 auto; font-size: 10.5px; color: var(--muted); }
+.code-row .btn.sm { flex: 0 0 auto; padding: 6px 9px; font-size: 11px; }

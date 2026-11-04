@@ -649,9 +649,10 @@
     var copy = document.createElement('button');
     copy.textContent = 'copy';
     copy.onclick = function () {
-      if (navigator.clipboard) navigator.clipboard.writeText(content);
-      copy.textContent = 'copied';
-      setTimeout(function () { copy.textContent = 'copy'; }, 1200);
+      copyText(content, function (ok) {
+        copy.textContent = ok ? 'copied' : 'copy fail';
+        setTimeout(function () { copy.textContent = 'copy'; }, 1200);
+      });
     };
 
     var retry = document.createElement('button');
@@ -877,13 +878,217 @@
     var res = CREDITS.redeem(input.value);
     if (res.ok) {
       input.value = '';
-      crMsg('premium on — ' + res.days + ' din ke liye');
+      crMsg('premium on — ' + res.days + ' din ke liye (' + res.label + ')');
     } else if (res.reason === 'used') {
       crMsg('ye code pehle use ho chuka hai', true);
     } else {
       crMsg('code galat hai', true);
     }
     refreshTokens();
+  }
+
+
+  /** Clipboard that also works on file:// (no secure-context clipboard API). */
+  function copyText(text, done) {
+    done = done || function () {};
+
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      done(ok);
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
+      return;
+    }
+    fallback();
+  }
+
+  // ------------------------------------------------------------ plan cards
+  function renderPlans() {
+    var wrap = $('plan-grid');
+    if (!wrap || !CREDITS) return;
+    wrap.innerHTML = '';
+
+    CREDITS.PLANS.forEach(function (p) {
+      var card = document.createElement('div');
+      card.className = 'plan-card';
+
+      var name = document.createElement('span');
+      name.className = 'plan-name';
+      name.textContent = p.label;
+
+      var price = document.createElement('span');
+      price.className = 'plan-price';
+      price.textContent = '₹' + p.price;
+
+      var days = document.createElement('span');
+      days.className = 'plan-days';
+      days.textContent = p.days + ' din';
+
+      var buy = document.createElement('button');
+      buy.className = 'btn sm primary buy-now';
+      buy.textContent = 'Buy now';
+      buy.onclick = function () {
+        openExternal(buyURL(p.label + ' · ₹' + p.price));
+      };
+
+      card.appendChild(name);
+      card.appendChild(price);
+      card.appendChild(days);
+      card.appendChild(buy);
+      wrap.appendChild(card);
+    });
+  }
+
+  // ------------------------------------------------------------ owner panel
+  var panelUnlocked = false;
+  var panelTaps = 0;
+
+  function panelMsg(text, err) {
+    var el = $('panel-msg');
+    if (!el) return;
+    el.textContent = text;
+    el.className = 'note small' + (err ? ' err' : '');
+  }
+
+  function openPanel() {
+    $('panel-wrap').classList.remove('hidden');
+    $('panel-msg').textContent = '';
+
+    if (panelUnlocked) {
+      $('panel-pin-row').classList.add('hidden');
+      $('panel-main').classList.remove('hidden');
+      renderGenerated();
+    } else {
+      $('panel-pin-row').classList.remove('hidden');
+      $('panel-main').classList.add('hidden');
+      $('panel-pin').value = '';
+    }
+  }
+
+  function unlockPanel() {
+    if (!CREDITS.checkPin($('panel-pin').value)) {
+      panelMsg('galat PIN', true);
+      return;
+    }
+    panelUnlocked = true;
+    $('panel-pin').value = '';
+    openPanel();
+  }
+
+  function makeCode() {
+    var res = CREDITS.generateCode($('panel-plan').value);
+    if (!res.ok) {
+      panelMsg('plan select karo', true);
+      return;
+    }
+    $('panel-out').classList.remove('hidden');
+    $('panel-code').value = res.code;
+    panelMsg(res.label + ' · ₹' + res.price + ' · ' + res.days + ' din');
+    renderGenerated();
+  }
+
+  function codeMessage(code) {
+    var info = CREDITS.readCode(code);
+    var label = info ? info.label : '';
+    return 'DARK AGENT Premium\n' +
+      (label ? 'Plan: ' + label + '\n' : '') +
+      'Code: ' + code + '\n\n' +
+      'Redeem: app → Credits → Redeem a code\n' +
+      'MADE BY - @TEAMDARK_OWNER';
+  }
+
+  function renderGenerated() {
+    var list = $('panel-list');
+    if (!list) return;
+    var items = CREDITS.generated();
+    list.innerHTML = '';
+
+    if (!items.length) {
+      list.innerHTML = '<p class="note small">Abhi koi code nahi banaya.</p>';
+      return;
+    }
+
+    items.forEach(function (g) {
+      var row = document.createElement('div');
+      row.className = 'code-row';
+
+      var code = document.createElement('span');
+      code.className = 'code-text';
+      code.textContent = g.code + (g.usedHere ? ' ✓' : '');
+
+      var meta = document.createElement('span');
+      meta.className = 'code-meta';
+      var plan = null;
+      CREDITS.PLANS.forEach(function (p) { if (p.id === g.plan) plan = p; });
+      meta.textContent = (plan ? plan.label : g.plan) + ' · ₹' + g.price;
+
+      var copy = document.createElement('button');
+      copy.className = 'btn sm';
+      copy.textContent = 'Copy';
+      copy.onclick = function () {
+        copyText(codeMessage(g.code), function (ok) {
+          panelMsg(ok ? 'copied' : 'copy fail — long-press karke copy karo', !ok);
+        });
+      };
+
+      row.appendChild(code);
+      row.appendChild(meta);
+      row.appendChild(copy);
+      list.appendChild(row);
+    });
+  }
+
+  function wirePanel() {
+    if (!$('panel-wrap')) return;
+
+    var line = $('credit-line');
+    if (line) {
+      line.onclick = function () {
+        panelTaps++;
+        if (panelTaps >= 7) {
+          panelTaps = 0;
+          openPanel();
+        }
+      };
+    }
+
+    $('panel-unlock').onclick = unlockPanel;
+    $('panel-pin').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); unlockPanel(); }
+    });
+
+    var sel = $('panel-plan');
+    sel.innerHTML = '';
+    CREDITS.PLANS.forEach(function (p) {
+      var o = document.createElement('option');
+      o.value = p.id;
+      o.textContent = p.label + ' — ₹' + p.price + ' (' + p.days + ' din)';
+      sel.appendChild(o);
+    });
+
+    $('panel-gen').onclick = makeCode;
+
+    $('panel-copy').onclick = function () {
+      copyText($('panel-code').value, function (ok) {
+        panelMsg(ok ? 'copied' : 'copy fail — long-press karke copy karo', !ok);
+      });
+    };
+
+    $('panel-copy-msg').onclick = function () {
+      copyText(codeMessage($('panel-code').value), function (ok) {
+        panelMsg(ok ? 'code + message copied' : 'copy fail', !ok);
+      });
+    };
   }
 
   function wireCredits() {
@@ -1145,7 +1350,9 @@
       t.onclick = function () { switchTab(t.getAttribute('data-tab')); };
     });
     $('btn-tokens').onclick = function () { switchTab('credits'); };
+    renderPlans();
     wireCredits();
+    wirePanel();
     $('btn-send').onclick = function () { send($('input').value); };
     $('btn-stop').onclick = stop;
 

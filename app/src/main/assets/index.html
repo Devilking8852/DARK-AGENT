@@ -134,24 +134,17 @@
   </div>
 
   <div class="cr-box buy">
-    <h3>Buy premium</h3>
-    <p class="note">Payment UPI se. Tap karo → Telegram khulega, code wahin se milega.</p>
-    <button class="buy-btn" data-buy="Premium · ₹49 / month">
-      <span class="buy-plan">Premium</span>
-      <span class="buy-price">₹49 <small>/ month</small></span>
-    </button>
-    <button class="buy-btn" data-buy="Premium · ₹399 / year (save ₹189)">
-      <span class="buy-plan">Premium</span>
-      <span class="buy-price">₹399 <small>/ year</small></span>
-    </button>
+    <h3>Premium plans</h3>
+    <p class="note">Buy now dabao → Telegram khulega. Payment UPI, code wahin se milega.</p>
+    <div class="plan-grid" id="plan-grid"></div>
     <p class="note small tg-line">Tap = <span class="tg">@TEAMDARK_OWNER</span> on Telegram</p>
   </div>
 
   <div class="cr-box">
     <h3>Redeem a code</h3>
-    <p class="note">Code mila? Yahan daalo — 30 din unlimited chat, tokens nahi katenge.</p>
+    <p class="note">Code mila? Yahan daalo — plan ke din unlimited chat, tokens nahi katenge.</p>
     <div class="row">
-      <input id="cr-code" placeholder="TEAMDARK-30" autocapitalize="characters" autocorrect="off" spellcheck="false" />
+      <input id="cr-code" placeholder="DA-M1-XXXXX-XXXXX" autocapitalize="characters" autocorrect="off" spellcheck="false" />
       <button class="btn ghost" id="cr-redeem">Redeem</button>
     </div>
     <p class="note small" id="cr-msg"></p>
@@ -166,8 +159,50 @@
     </p>
   </div>
 
-  <p class="note small credit-line">MADE BY - @TEAMDARK_OWNER</p>
+  <p class="note small credit-line" id="credit-line">MADE BY - @TEAMDARK_OWNER</p>
 </section>
+
+
+<!-- owner redeem panel (hidden — tap the credit line 7x) -->
+<div class="sheet-wrap hidden" id="panel-wrap">
+  <div class="backdrop" data-close="panel"></div>
+  <div class="sheet" role="dialog" aria-label="Redeem panel">
+    <div class="sheet-head">
+      <h2>Redeem panel</h2>
+      <button class="icon" data-close="panel">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="row" id="panel-pin-row">
+        <input id="panel-pin" type="password" placeholder="Panel PIN" autocapitalize="off" autocorrect="off" spellcheck="false" />
+        <button class="btn ghost" id="panel-unlock">Unlock</button>
+      </div>
+
+      <div id="panel-main" class="hidden">
+        <label>Plan
+          <select id="panel-plan"></select>
+        </label>
+        <button class="btn primary" id="panel-gen">Generate code</button>
+
+        <div id="panel-out" class="panel-out hidden">
+          <input id="panel-code" readonly autocapitalize="characters" spellcheck="false" />
+          <div class="row">
+            <button class="btn sm" id="panel-copy">Copy</button>
+            <button class="btn sm" id="panel-copy-msg">Copy + message</button>
+          </div>
+        </div>
+
+        <p class="note small" id="panel-msg"></p>
+
+        <h3 class="panel-h3">Generated codes</h3>
+        <div id="panel-list" class="code-list"></div>
+        <p class="note small">
+          Har code ek hi baar chalta hai (is device pe). Doosre phone pe bhi
+          redeem ho sakta hai, kyunki app offline hai.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- settings sheet -->
 <div class="sheet-wrap hidden" id="settings-wrap">

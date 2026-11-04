@@ -75,16 +75,52 @@ click($('cr-redeem'));
 assert.ok($('cr-msg').textContent.includes('galat'), 'bad code is rejected');
 
 // --------------------------------------------------------------- buy -> telegram
-const buy = doc.querySelectorAll('[data-buy]');
-assert.strictEqual(buy.length, 2, 'monthly + yearly buy buttons');
-click(buy[0]);
-click(buy[1]);
-assert.strictEqual(opened.length, 2, 'both buttons open an external link');
+const buy = doc.querySelectorAll('.buy-now');
+assert.strictEqual(buy.length, 4, 'four premium plans');
+assert.strictEqual($('plan-grid').querySelectorAll('.plan-card').length, 4);
+
+const prices = Array.from(buy).map((b) => b.parentNode.querySelector('.plan-price').textContent);
+assert.deepStrictEqual(prices, ['₹89', '₹150', '₹350', '₹600'], 'price list');
+
+buy.forEach((b) => click(b));
+assert.strictEqual(opened.length, 4, 'every Buy now opens an external link');
 opened.forEach((u) => {
   assert.ok(u.startsWith('https://t.me/TEAMDARK_OWNER'), 'goes to the owner telegram, got ' + u);
   assert.ok(u.indexOf('text=') !== -1, 'prefilled message');
 });
-assert.ok(decodeURIComponent(opened[1]).includes('₹399'), 'yearly plan is in the message');
+assert.ok(decodeURIComponent(opened[3]).includes('₹600'), 'yearly plan in the message');
+
+// ------------------------------------------------------------ owner panel
+assert.ok($('panel-wrap').classList.contains('hidden'), 'panel starts hidden');
+for (let i = 0; i < 6; i++) click($('credit-line'));
+assert.ok($('panel-wrap').classList.contains('hidden'), '6 taps is not enough');
+click($('credit-line'));
+assert.strictEqual($('panel-wrap').classList.contains('hidden'), false, '7 taps open the panel');
+assert.strictEqual($('panel-main').classList.contains('hidden'), true, 'locked until the pin is right');
+
+$('panel-pin').value = 'nope';
+click($('panel-unlock'));
+assert.ok($('panel-msg').textContent.includes('galat'), 'wrong pin rejected');
+assert.strictEqual($('panel-main').classList.contains('hidden'), true);
+
+$('panel-pin').value = 'teamdark@2026';
+click($('panel-unlock'));
+assert.strictEqual($('panel-main').classList.contains('hidden'), false, 'correct pin unlocks');
+assert.strictEqual($('panel-plan').options.length, 4, 'four plans in the generator');
+
+$('panel-plan').value = 'M6';
+click($('panel-gen'));
+const code = $('panel-code').value;
+assert.ok(/^DA-M6-[2-9A-HJ-NP-Z]{5}-[0-9A-F]{5}$/.test(code), 'generated code format: ' + code);
+assert.strictEqual(window.DarkCredits.readCode(code).days, 180, '6 month code');
+assert.strictEqual($('panel-list').querySelectorAll('.code-row').length, 1, 'code shows up in the list');
+assert.ok($('panel-list').textContent.includes(code));
+
+// generated code redeems inside the app
+$('cr-code').value = code;
+click($('cr-redeem'));
+assert.strictEqual(window.DarkCredits.isPremium(), true, 'generated code redeems');
+assert.ok($('cr-msg').textContent.includes('180'), 'premium length shown');
 
 // ----------------------------------------------------------------------- music
 clickTab('music');
