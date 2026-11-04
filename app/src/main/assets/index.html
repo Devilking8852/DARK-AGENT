@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="theme-color" content="#0b0d12" />
+<title>DARK AGENT</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <button class="icon" id="btn-menu" aria-label="Chats">☰</button>
+  <div class="title">
+    <span class="brand">DARK AGENT</span>
+    <button class="chip" id="btn-model">model</button>
+  </div>
+  <button class="icon" id="btn-settings" aria-label="Settings">⚙</button>
+</header>
+
+<main id="chat" class="chat">
+  <section class="empty" id="empty">
+    <div class="empty-mark">◈</div>
+    <h1>DARK AGENT</h1>
+    <p>Kisi bhi OpenAI-compatible API se baat karo.<br />Settings me apna key aur model daalo.</p>
+    <div class="quick" id="quick"></div>
+  </section>
+</main>
+
+<div class="composer">
+  <div class="composer-inner">
+    <textarea id="input" rows="1" placeholder="Message DARK AGENT…" enterkeyhint="send"></textarea>
+    <button id="btn-send" class="send" aria-label="Send">↑</button>
+    <button id="btn-stop" class="send stop hidden" aria-label="Stop">■</button>
+  </div>
+  <div class="hint" id="hint"></div>
+</div>
+
+<!-- settings sheet -->
+<div class="sheet-wrap hidden" id="settings-wrap">
+  <div class="backdrop" data-close="settings"></div>
+  <div class="sheet" role="dialog" aria-label="Settings">
+    <div class="sheet-head">
+      <h2>Settings</h2>
+      <button class="icon" data-close="settings">✕</button>
+    </div>
+    <div class="sheet-body">
+      <label>Provider preset
+        <select id="s-preset">
+          <option value="">— custom / keep URL —</option>
+        </select>
+      </label>
+      <label>API base URL
+        <input id="s-base" type="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://api.venice.ai/api/v1" />
+      </label>
+      <label>API key
+        <input id="s-key" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="sk-…" />
+      </label>
+      <label>Model
+        <div class="row">
+          <input id="s-model" list="model-list" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="venice-uncensored-1-2" />
+          <button class="btn ghost" id="btn-load-models" type="button">Load</button>
+        </div>
+        <datalist id="model-list"></datalist>
+      </label>
+      <label>System prompt
+        <textarea id="s-sys" rows="3" placeholder="You are a helpful assistant."></textarea>
+      </label>
+      <div class="row two">
+        <label>Temperature
+          <input id="s-temp" type="number" min="0" max="2" step="0.1" />
+        </label>
+        <label>Max tokens
+          <input id="s-max" type="number" min="32" max="200000" step="32" />
+        </label>
+      </div>
+      <p class="note" id="s-status"></p>
+      <button class="btn primary" id="btn-save">Save</button>
+      <p class="note small">Key sirf is device pe (localStorage) rehti hai. Koi server nahi.</p>
+    </div>
+  </div>
+</div>
+
+<!-- chats drawer -->
+<div class="sheet-wrap hidden" id="chats-wrap">
+  <div class="backdrop" data-close="chats"></div>
+  <div class="sheet left" role="dialog" aria-label="Chats">
+    <div class="sheet-head">
+      <h2>Chats</h2>
+      <button class="icon" data-close="chats">✕</button>
+    </div>
+    <div class="sheet-body">
+      <button class="btn primary" id="btn-new">+ New chat</button>
+      <div id="chat-list" class="chat-list"></div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
