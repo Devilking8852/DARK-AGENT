@@ -830,11 +830,17 @@
     $('chat').classList.toggle('hidden', name !== 'chat');
     $('composer').classList.toggle('hidden', name !== 'chat');
 
-    var panes = { image: 'view-image', music: 'view-music', credits: 'view-credits' };
+    var panes = { image: 'view-image', studio: 'view-studio', music: 'view-music', credits: 'view-credits' };
     Object.keys(panes).forEach(function (k) {
       var el = $(panes[k]);
       if (el) el.classList.toggle('hidden', k !== name);
     });
+
+    if (name !== 'studio' && vidPlayer && vidPlayer.cancel) {
+      vidPlayer.cancel();
+      vidPlayer = null;
+      setBar(0);
+    }
 
     if (name === 'credits') refreshTokens();
   }
@@ -1089,6 +1095,286 @@
         panelMsg(ok ? 'code + message copied' : 'copy fail', !ok);
       });
     };
+  }
+
+
+  // ---------------------------------------------------------------- studio
+  var STUDIO_KEY = 'darkagent.studio.v1';
+  var vidState = { a: '🍎', b: '🐱', topic: '', script: '', music: true };
+  var vidPlayer = null;
+
+  var DEFAULT_SCRIPT =
+    'A: Aaj itni garmi kyun hai?\n' +
+    'B: Main aam hoon, mujhe fridge chahiye.\n' +
+    'A: Fridge full hai, sirf biscuit pada hai.\n' +
+    'B: Biscuit? Main billi hoon, doodh do.\n' +
+    'A: Doodh khatam. Sirf DARK AGENT bacha hai.\n' +
+    'B: To phir phone de, script likhwaati hoon.';
+
+  var SCRIPT_PROMPT =
+    'You write viral Instagram Reels dialogue scripts in Hinglish (Hindi written in Latin letters).\n' +
+    'Reply with ONLY minified JSON in this exact shape:\n' +
+    '{"title":"max 6 words","lines":[{"who":"A","text":"..."},{"who":"B","text":"..."}]}\n' +
+    'Rules: 6 to 8 lines total. Each line max 12 words. Funny, punchy, one punchline at the end. ' +
+    'No emojis, no hashtags, no markdown, no explanation. Characters are A and B.';
+
+  function loadStudio() {
+    try {
+      var raw = localStorage.getItem(STUDIO_KEY);
+      if (!raw) return;
+      var d = JSON.parse(raw);
+      if (d && typeof d === 'object') {
+        vidState.a = d.a || vidState.a;
+        vidState.b = d.b || vidState.b;
+        vidState.topic = d.topic || '';
+        vidState.script = d.script || '';
+        vidState.music = d.music !== false;
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  function saveStudio() {
+    try { localStorage.setItem(STUDIO_KEY, JSON.stringify(vidState)); } catch (e) { /* ignore */ }
+  }
+
+  function vidMsg(text, err) {
+    var el = $('vid-status');
+    if (!el) return;
+    el.textContent = text;
+    el.style.color = err ? 'var(--danger)' : 'var(--accent-2)';
+  }
+
+  function setBar(p) {
+    var bar = $('vid-bar');
+    if (bar) bar.style.width = Math.round(Math.max(0, Math.min(1, p)) * 100) + '%';
+  }
+
+  function scriptLines() {
+    return GLOBAL.DarkVideo.parseScript($('vid-script').value);
+  }
+
+  function vidOpts() {
+    return {
+      lines: scriptLines(),
+      emojiA: vidState.a,
+      emojiB: vidState.b,
+      title: (vidState.topic || 'DARK AGENT').slice(0, 32),
+      music: $('vid-music').checked
+    };
+  }
+
+  function saveBlob(name, mime, b64) {
+    if (GLOBAL.Native && GLOBAL.Native.saveBase64) {
+      var path = GLOBAL.Native.saveBase64(name, mime, b64);
+      if (path && path.indexOf('error') !== 0) vidMsg('saved: ' + path);
+      else vidMsg(path || 'save fail', true);
+      return;
+    }
+    var a = document.createElement('a');
+    a.href = 'data:' + mime + ';base64,' + b64;
+    a.download = name;
+    a.click();
+    vidMsg('saved ' + name);
+  }
+
+  function stopVideo() {
+    if (vidPlayer && vidPlayer.cancel) vidPlayer.cancel();
+    vidPlayer = null;
+    setBar(0);
+    vidMsg('stopped');
+  }
+
+  /** Model reply -> {title, lines} (tolerates code fences and stray text). */
+  function parseScriptJSON(text) {
+    var raw = String(text || '').replace(/```[a-z]*/gi, '').replace(/```/g, '').trim();
+    var start = raw.indexOf('{');
+    var end = raw.lastIndexOf('}');
+    if (start === -1 || end === -1 || end <= start) return null;
+
+    var obj;
+    try { obj = JSON.parse(raw.slice(start, end + 1)); } catch (e) { return null; }
+
+    var src = obj.lines || obj.dialogue || obj.script || [];
+    if (!Array.isArray(src)) return null;
+
+    var lines = [];
+    src.forEach(function (l) {
+      if (typeof l === 'string') {
+        lines.push({ who: lines.length % 2 === 0 ? 'A' : 'B', text: l.trim() });
+        return;
+      }
+      if (!l) return;
+      var text = String(l.text || l.line || l.content || '').trim();
+      if (!text) return;
+      lines.push({ who: String(l.who || l.speaker || 'A').toUpperCase() === 'B' ? 'B' : 'A', text: text });
+    });
+
+    lines = lines.filter(function (l) { return l.text; }).slice(0, 14);
+    if (!lines.length) return null;
+
+    return { title: String(obj.title || '').slice(0, 32), lines: lines };
+  }
+
+  function fillScript(parsed) {
+    var text = parsed.lines.map(function (l) {
+      return l.who + ': ' + l.text;
+    }).join('\n');
+
+    $('vid-script').value = text;
+    vidState.script = text;
+
+    if (parsed.title && !$('vid-topic').value.trim()) {
+      $('vid-topic').value = parsed.title;
+      vidState.topic = parsed.title;
+    }
+    saveStudio();
+  }
+
+  function aiScript() {
+    if (!settings.key && !/localhost|127\.0\.0\.1/.test(settings.base)) {
+      openSettings();
+      vidMsg('API key daalo pehle', true);
+      return;
+    }
+
+    var topic = $('vid-topic').value.trim() ||
+      'a fruit and an animal arguing about summer heat';
+    if (!spendTokens(1)) return;
+
+    var btn = $('vid-ai');
+    btn.disabled = true;
+    vidMsg('script likh raha hoon…');
+
+    postJSON(chatURL(), authHeaders(), {
+      model: settings.model,
+      messages: [
+        { role: 'system', content: SCRIPT_PROMPT },
+        { role: 'user', content: 'Topic: ' + topic }
+      ],
+      temperature: 0.95,
+      max_tokens: 600,
+      stream: false
+    }, function (res) {
+      btn.disabled = false;
+
+      if (!res.ok) {
+        vidMsg(res.error || 'request failed', true);
+        return;
+      }
+
+      var msg = res.data && res.data.choices && res.data.choices[0] && res.data.choices[0].message;
+      var text = (msg && (msg.content || msg.reasoning_content || msg.reasoning)) || '';
+      var parsed = parseScriptJSON(text);
+
+      if (!parsed) {
+        // fall back to plain "A: ..." lines
+        var plain = GLOBAL.DarkVideo.parseScript(text);
+        if (!plain.length) {
+          vidMsg('script parse nahi hui — doosra model try karo', true);
+          return;
+        }
+        parsed = { title: '', lines: plain };
+      }
+
+      fillScript(parsed);
+      vidMsg(parsed.lines.length + ' lines ready — Preview dabao');
+    });
+  }
+
+  function playPreview() {
+    var opts = vidOpts();
+    if (!opts.lines.length) {
+      vidMsg('script khali hai', true);
+      return;
+    }
+
+    if (vidPlayer && vidPlayer.cancel) vidPlayer.cancel();
+    vidMsg('preview…');
+    setBar(0);
+
+    vidPlayer = GLOBAL.DarkVideo.preview($('vid-canvas'), opts, setBar, function (err) {
+      vidPlayer = null;
+      setBar(0);
+      vidMsg(err ? err.message : 'preview done', !!err);
+    });
+  }
+
+  function recordVideo() {
+    var opts = vidOpts();
+    if (!opts.lines.length) {
+      vidMsg('script khali hai', true);
+      return;
+    }
+
+    var tl = GLOBAL.DarkVideo.buildTimeline(opts.lines);
+    if (tl.total > 45) {
+      vidMsg('reel bahut lamba (' + Math.round(tl.total) + 's) — lines kam karo', true);
+      return;
+    }
+
+    var btn = $('vid-record');
+    if (btn.disabled) return;
+
+    btn.disabled = true;
+    vidMsg('recording… screen chalu rakho');
+    setBar(0);
+
+    vidPlayer = GLOBAL.DarkVideo.record(opts, setBar, function (err, out) {
+      vidPlayer = null;
+      btn.disabled = false;
+      setBar(0);
+
+      if (err) {
+        vidMsg(err.message, true);
+        return;
+      }
+
+      var name = 'darkagent-reel-' + Date.now() + '.' + out.ext;
+      saveBlob(name, out.mime, out.b64);
+      vidMsg('reel ready · ' + out.seconds.toFixed(1) + 's');
+    });
+  }
+
+  function saveFrame() {
+    var opts = vidOpts();
+    if (!opts.lines.length) {
+      vidMsg('script khali hai', true);
+      return;
+    }
+    var name = 'darkagent-frame-' + Date.now() + '.png';
+    saveBlob(name, 'image/png', GLOBAL.DarkVideo.framePng(opts));
+  }
+
+  function wireStudio() {
+    if (!$('view-studio') || !GLOBAL.DarkVideo) return;
+    var V = GLOBAL.DarkVideo;
+    loadStudio();
+
+    $('vid-a').textContent = vidState.a;
+    $('vid-b').textContent = vidState.b;
+    $('vid-topic').value = vidState.topic;
+    $('vid-script').value = vidState.script || DEFAULT_SCRIPT;
+    $('vid-music').checked = vidState.music;
+
+    function cycle(which) {
+      var i = V.EMOJIS.indexOf(vidState[which]);
+      vidState[which] = V.EMOJIS[(i + 1) % V.EMOJIS.length];
+      $(which === 'a' ? 'vid-a' : 'vid-b').textContent = vidState[which];
+      saveStudio();
+    }
+
+    $('vid-a').onclick = function () { cycle('a'); };
+    $('vid-b').onclick = function () { cycle('b'); };
+
+    $('vid-topic').oninput = function () { vidState.topic = this.value; saveStudio(); };
+    $('vid-script').oninput = function () { vidState.script = this.value; saveStudio(); };
+    $('vid-music').onchange = function () { vidState.music = this.checked; saveStudio(); };
+
+    $('vid-ai').onclick = aiScript;
+    $('vid-play').onclick = playPreview;
+    $('vid-stop').onclick = stopVideo;
+    $('vid-record').onclick = recordVideo;
+    $('vid-frame').onclick = saveFrame;
   }
 
   function wireCredits() {
@@ -1353,6 +1639,7 @@
     renderPlans();
     wireCredits();
     wirePanel();
+    wireStudio();
     $('btn-send').onclick = function () { send($('input').value); };
     $('btn-stop').onclick = stop;
 
@@ -1405,6 +1692,7 @@
       buildPayload: buildPayload,
       textFromBody: textFromBody,
       errorFromBody: errorFromBody,
+      parseScriptJSON: parseScriptJSON,
       settings: DEFAULTS,
       presets: PRESETS
     };

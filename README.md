@@ -15,6 +15,7 @@ Install → allow "install from unknown sources" → open → ⚙ → paste your
 
 ## Features
 
+- 🎬 **Studio** — talking-fruit/animal Reels: AI script → animated 9:16 clip (MP4/WebM) with captions
 - 🎨 **Image editor** — load a photo, brightness/contrast/saturation/blur, rotate/flip, brush, text, save as PNG
 - 🎵 **Music maker** — 16-step drum + melody sequencer, WebAudio preview, export a real `.wav`
 - ✦ **Token meter** — 1000 on first run, 300 daily, 50 per ad, premium codes; 1 token/message, 3 per web round
@@ -63,6 +64,7 @@ Native code is intentionally tiny:
 | `assets/credits.js` | token ledger (`1000` start, `+300` daily, ads, premium codes) |
 | `assets/image.js` | canvas image editor (filters, brush, text, PNG export) |
 | `assets/music.js` | step sequencer + WAV encoder (16-bit PCM, no dependencies) |
+| `assets/video.js` | Studio renderer: script → timeline → canvas frames → MediaRecorder |
 
 Every asset except the DOM wiring runs under node, so the core is tested without a device:
 
@@ -103,8 +105,27 @@ No extra API key needed for search — it goes through the native HTTP bridge.
 | --- | --- |
 | **Chat** | the agent; 🌐 enables `web_search` / `open_url` |
 | **Image** | pick a photo → filters, rotate/flip, brush, text → **Save PNG** (Downloads) |
+| **Studio** | AI dialogue + 2 animated characters → **Record 9:16** video |
 | **Music** | tap steps, ▶ Play, **Save WAV** (Downloads) |
 | **Credits** | balance, 4 premium plans (Buy now → Telegram), daily reward, ad bonus, redeem code, owner panel |
+
+## Studio (talking characters)
+
+The trending "fruits and animals talking" Reels, as far as an offline app can do it:
+
+1. pick two characters (tap the emoji to cycle through fruits / animals)
+2. type a topic, tap **AI script** — the chat model writes 6–8 Hinglish lines
+   (costs 1 token; needs a tool-capable key, same as the chat tab)
+3. edit the lines (`A: …` / `B: …`), tap **Preview**
+4. tap **Record 9:16** — it renders in real time at 720×1280 / 30 fps with
+   captions, a bobbing character per line, the watermark and an optional
+   generated background beat, then saves to **Downloads** as `.mp4` (or `.webm`)
+
+**What it is not:** there is no AI video model inside the APK. Characters are
+emoji + canvas animation, not generative video, and the **voice is not recorded**
+— screen-record audio from TTS isn't accessible from a WebView. Add your own
+voiceover in Instagram's editor or InShot. Reels upload wants MP4; if the device
+records WebM, convert it first (or use the MP4 codec when the WebView offers it).
 
 ## Premium plans
 

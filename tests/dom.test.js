@@ -31,7 +31,7 @@ window.addEventListener('error', (e) => errors.push(String(e.message)));
 const opened = [];
 window.Native = { openUrl: (u) => opened.push(u) };
 
-for (const f of ['tools.js', 'credits.js', 'image.js', 'music.js', 'app.js']) {
+for (const f of ['tools.js', 'credits.js', 'image.js', 'music.js', 'video.js', 'app.js']) {
   window.eval(fs.readFileSync(path.join(root, f), 'utf8'));
 }
 window.document.dispatchEvent(new window.Event('DOMContentLoaded'));
@@ -48,10 +48,10 @@ assert.ok(window.DarkImage && window.DarkMusic, 'editor apis missing');
 // ------------------------------------------------------------------ tab switch
 const clickTab = (name) => click(doc.querySelector('.tab[data-tab="' + name + '"]'));
 
-const panes = ['view-image', 'view-music', 'view-credits', 'chat', 'composer'];
-const shown = { image: ['view-image'], music: ['view-music'], credits: ['view-credits'], chat: ['chat', 'composer'] };
+const panes = ['view-image', 'view-studio', 'view-music', 'view-credits', 'chat', 'composer'];
+const shown = { image: ['view-image'], studio: ['view-studio'], music: ['view-music'], credits: ['view-credits'], chat: ['chat', 'composer'] };
 
-for (const tab of ['image', 'music', 'credits', 'chat']) {
+for (const tab of ['image', 'studio', 'music', 'credits', 'chat']) {
   clickTab(tab);
   for (const id of panes) {
     const isHidden = $(id).classList.contains('hidden');
@@ -139,6 +139,20 @@ click($('btn-demo'));
 assert.strictEqual(window.DarkMusic.grid().kick.filter(Boolean).length, 4);
 click($('btn-clear'));
 assert.strictEqual(window.DarkMusic.grid().kick.filter(Boolean).length, 0);
+
+// --------------------------------------------------------------------- studio
+clickTab('studio');
+assert.ok(window.DarkVideo, 'DarkVideo api missing');
+assert.ok($('vid-script').value.length > 20, 'default script is filled in');
+assert.strictEqual(window.DarkVideo.parseScript($('vid-script').value).length, 6, 'default script lines');
+
+const before = $('vid-a').textContent;
+click($('vid-a'));
+assert.notStrictEqual($('vid-a').textContent, before, 'character A cycles emoji');
+assert.ok(window.DarkVideo.EMOJIS.indexOf($('vid-a').textContent) !== -1);
+
+assert.strictEqual(typeof $('vid-ai').onclick, 'function', 'AI script button wired');
+assert.strictEqual(typeof $('vid-record').onclick, 'function', 'record button wired');
 
 // ----------------------------------------------------------------------- image
 clickTab('image');

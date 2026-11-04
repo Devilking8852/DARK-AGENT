@@ -22,6 +22,7 @@
 <nav class="tabs" id="tabs">
   <button class="tab on" data-tab="chat">Chat</button>
   <button class="tab" data-tab="image">Image</button>
+  <button class="tab" data-tab="studio">Studio</button>
   <button class="tab" data-tab="music">Music</button>
   <button class="tab" data-tab="credits">Credits</button>
 </nav>
@@ -88,6 +89,51 @@
       <button class="btn sm" id="img-text-add">Add</button>
     </div>
   </div>
+</section>
+
+
+<!-- ============================== studio ================================ -->
+<section id="view-studio" class="pane aux hidden">
+  <div class="pane-head">
+    <h2>Studio</h2>
+    <span class="pane-note" id="vid-status"></span>
+  </div>
+
+  <div class="studio-chars">
+    <button class="char-pick" id="vid-a" title="Character A">🍎</button>
+    <span class="char-vs">vs</span>
+    <button class="char-pick" id="vid-b" title="Character B">🐱</button>
+  </div>
+
+  <div class="row">
+    <input id="vid-topic" placeholder="Topic — jaise 'aam vs billi, garmi'" autocapitalize="sentences" />
+    <button class="btn ghost" id="vid-ai">AI script</button>
+  </div>
+
+  <textarea id="vid-script" rows="7" autocapitalize="sentences" spellcheck="false"
+    placeholder="A: Hello, main aam hoon&#10;B: Aur main billi…"></textarea>
+
+  <div class="row wrap">
+    <button class="btn sm primary" id="vid-play">▶ Preview</button>
+    <button class="btn sm" id="vid-stop">■ Stop</button>
+    <button class="btn sm" id="vid-record">Record 9:16</button>
+    <button class="btn sm" id="vid-frame">Save frame</button>
+  </div>
+
+  <label class="check">
+    <input type="checkbox" id="vid-music" checked />
+    <span>Background beat</span>
+  </label>
+
+  <div class="vid-stage">
+    <canvas id="vid-canvas" width="720" height="1280"></canvas>
+  </div>
+  <div class="vid-progress"><i id="vid-bar"></i></div>
+
+  <p class="note small">
+    Voice app record nahi karta — video pe apna voiceover daalo (Instagram editor ya InShot).
+    AI script tumhare hi API key se banti hai (1 token).
+  </p>
 </section>
 
 <!-- ============================ music maker ============================ -->
@@ -269,6 +315,7 @@
 <script src="credits.js"></script>
 <script src="image.js"></script>
 <script src="music.js"></script>
+<script src="video.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
