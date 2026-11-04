@@ -86,6 +86,20 @@ Tap 🌐 in the composer to switch the agent on. Then the model can call two too
 Up to 4 tool rounds per message. Sources show up as chips under the answer.
 No extra API key needed for search — it goes through the native HTTP bridge.
 
+## Troubleshooting
+
+| What you see | Meaning / fix |
+| --- | --- |
+| `HTTP 402: Insufficient USD or Diem balance` | Venice account has no credits — top up or switch provider |
+| `HTTP 401` | wrong API key |
+| `HTTP 404` | wrong base URL (a trailing `/v1` is required) or wrong model id |
+| `empty response` | model returned no text — usually a non-chat model id or a tool-only reply |
+| reasoning models show text late | the app also accepts `reasoning_content` deltas |
+| web tools do nothing | the model doesn't support tool calling — 🌐 needs Venice/Groq/OpenRouter/OpenAI |
+
+Since v1.2.0 the app shows the provider's real error text in the chat bubble
+instead of hiding it, so copy that message if you're stuck.
+
 ## Limits (honest notes)
 
 - This is a **client**, not a sandbox escape: Android apps can't run shell commands

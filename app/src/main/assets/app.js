@@ -192,10 +192,20 @@
 
     var choice = (obj.choices && obj.choices[0]) || null;
     var delta = '';
+    var reasoning = '';
+    var finish = null;
     if (choice) {
-      delta = (choice.delta && (choice.delta.content || '')) || (choice.message && choice.message.content) || '';
+      var d = choice.delta || choice.message || {};
+      if (typeof d.content === 'string') delta = d.content;
+      else if (Array.isArray(d.content)) {
+        delta = d.content.map(function (part) { return part && part.text ? part.text : ''; }).join('');
+      } else if (typeof choice.text === 'string') {
+        delta = choice.text;
+      }
+      reasoning = d.reasoning_content || d.reasoning || '';
+      finish = choice.finish_reason || null;
     }
-    return { delta: delta, done: !!choice && (choice.finish_reason != null), usage: obj.usage || null };
+    return { delta: delta, reasoning: reasoning, finish: finish, done: finish != null, usage: obj.usage || null };
   }
 
   function buildPayload(messages, opts) {
@@ -225,18 +235,41 @@
   var seq = 0;
 
   /** POST JSON and stream response lines. Returns {id, abort}. */
+  /**
+   * POST and stream response lines.
+   * onEnd gets {ok, status, raw, error, aborted} so callers can show the real
+   * provider error instead of a generic "empty response".
+   */
   function postStream(url, headers, body, onLine, onEnd) {
     var id = 'r' + (++seq) + Date.now().toString(36);
     var finished = false;
+    var raw = '';
+    var status = 0;
+
+    function close(result) {
+      if (finished) return;
+      finished = true;
+      delete eventHandlers[id];
+      onEnd(result);
+    }
 
     eventHandlers[id] = function (ev) {
-      if (ev.type === 'line') onLine(ev.line);
-      if (ev.type === 'error') { finished = true; delete eventHandlers[id]; onEnd({ ok: false, error: ev.message || 'network error' }); }
+      if (ev.type === 'status') status = ev.status || 0;
+      if (ev.type === 'line') {
+        raw += ev.line + '\n';
+        onLine(ev.line);
+      }
+      if (ev.type === 'error') {
+        close({ ok: false, status: status, raw: raw, error: ev.message || 'network error' });
+      }
       if (ev.type === 'done') {
-        if (finished) return;
-        finished = true;
-        delete eventHandlers[id];
-        onEnd({ ok: true });
+        var ok = !status || status < 400;
+        close({
+          ok: ok,
+          status: status,
+          raw: raw,
+          error: ok ? null : errorFromBody(raw, status)
+        });
       }
     };
 
@@ -247,7 +280,7 @@
         finished = true;
         delete eventHandlers[id];
         try { if (GLOBAL.Native && GLOBAL.Native.abort) GLOBAL.Native.abort(id); } catch (e) { /* ignore */ }
-        onEnd({ ok: false, aborted: true });
+        onEnd({ ok: false, aborted: true, status: status, raw: raw });
       }
     };
 
@@ -256,7 +289,7 @@
         GLOBAL.Native.post(id, url, JSON.stringify(headers), JSON.stringify(body));
       } catch (e) {
         delete eventHandlers[id];
-        onEnd({ ok: false, error: String(e && e.message || e) });
+        onEnd({ ok: false, error: String(e && e.message || e), raw: raw, status: 0 });
       }
       return handle;
     }
@@ -264,25 +297,26 @@
     // browser/node fallback (CORS permitting)
     var ctrl = new AbortController();
     handle.abort = function () {
+      ctrl.abort();
       if (finished) return;
       finished = true;
       delete eventHandlers[id];
-      ctrl.abort();
-      onEnd({ ok: false, aborted: true });
+      onEnd({ ok: false, aborted: true, status: status, raw: raw });
     };
 
     fetch(url, { method: 'POST', headers: headers, body: JSON.stringify(body), signal: ctrl.signal })
       .then(function (res) {
+        status = res.status;
         if (!res.ok) {
           return res.text().then(function (t) {
-            var msg = 'HTTP ' + res.status;
-            try { msg += ': ' + (JSON.parse(t).error.message || ''); } catch (e) { /* plain */ }
-            throw new Error(msg);
+            raw = t;
+            throw new Error(errorFromBody(t, res.status));
           });
         }
         if (!res.body || !res.body.getReader) {
           return res.text().then(function (t) {
-            t.split('\n').forEach(onLine);
+            raw = t;
+            t.split('\n').forEach(function (line) { onLine(line); });
           });
         }
         var reader = res.body.getReader();
@@ -294,21 +328,68 @@
             buf += dec.decode(r.value, { stream: true });
             var parts = buf.split('\n');
             buf = parts.pop();
-            parts.forEach(onLine);
+            parts.forEach(function (line) { raw += line + '\n'; onLine(line); });
             return pump();
           });
         }
         return pump();
       })
-      .then(function () { if (!finished) { finished = true; delete eventHandlers[id]; onEnd({ ok: true }); } })
+      .then(function () { close({ ok: true, status: status, raw: raw }); })
       .catch(function (err) {
-        if (finished) return;
-        finished = true;
-        delete eventHandlers[id];
-        onEnd({ ok: false, error: String(err && err.message || err) });
+        if (err && err.name === 'AbortError') {
+          close({ ok: false, aborted: true, status: status, raw: raw });
+          return;
+        }
+        close({ ok: false, status: status, raw: raw, error: String(err && err.message || err) });
       });
 
     return handle;
+  }
+
+  /** Turn a provider error body into "HTTP 402: message". */
+  function errorFromBody(raw, status) {
+    var out = 'HTTP ' + (status || '?');
+    var text = String(raw || '').trim();
+    if (!text) return out;
+    try {
+      var obj = JSON.parse(text);
+      var e = obj.error || obj;
+      var msg = e.message || e.detail || e.msg || (typeof e === 'string' ? e : '');
+      if (msg) return out + ': ' + msg;
+    } catch (err) { /* not json */ }
+    return out + ': ' + text.replace(/\s+/g, ' ').slice(0, 180);
+  }
+
+  /**
+   * Best-effort text extraction from a whole response body (covers providers
+   * that ignore stream:true and return one JSON object).
+   */
+  function textFromBody(raw) {
+    var text = String(raw || '').trim();
+    if (!text) return '';
+
+    var lines = text.split('\n');
+    for (var i = lines.length - 1; i >= 0; i--) {
+      var line = lines[i].trim().replace(/^data:\s*/, '');
+      if (!line || line === '[DONE]' || line.charAt(0) !== '{') continue;
+      try {
+        var obj = JSON.parse(line);
+        var choice = (obj.choices && obj.choices[0]) || null;
+        if (!choice) continue;
+        var msg = choice.message || choice.delta || {};
+        var t = msg.content || msg.reasoning_content || msg.reasoning || choice.text || '';
+        if (typeof t === 'string' && t) return t;
+      } catch (e) { /* try the next line */ }
+    }
+
+    try {
+      var whole = JSON.parse(text);
+      var c = (whole.choices && whole.choices[0]) || {};
+      var m = c.message || c.delta || {};
+      return m.content || m.reasoning_content || m.reasoning || c.text || '';
+    } catch (e2) {
+      return '';
+    }
   }
 
   // ------------------------------------------------------------- rendering
@@ -409,14 +490,11 @@
     };
     var body = buildPayload(messages.filter(function (m) { return !m.pending; }), opts);
     var started = Date.now();
-    var gotAny = false;
+    var reasoningText = '';
 
     currentReq = postStream(
-      trimSlash(settings.base) + '/chat/completions',
-      {
-        'Authorization': 'Bearer ' + settings.key,
-        'Content-Type': 'application/json'
-      },
+      chatURL(),
+      authHeaders(),
       body,
       function (line) {
         var ev = parseStreamLine(line);
@@ -425,63 +503,45 @@
           hint(ev.error, true);
           return;
         }
+        if (ev.reasoning) reasoningText += ev.reasoning;
         if (ev.delta) {
-          gotAny = true;
           pendingText += ev.delta;
           paint();
         }
       },
       function (res) {
-        var finalText = pendingText;
         currentReq = null;
         setBusy(false);
 
+        if (res.aborted) {
+          hint('stopped');
+          return;
+        }
+
         if (!res.ok) {
-          if (res.aborted) {
-            hint('stopped');
-          } else {
-            hint(res.error || 'request failed', true);
-          }
-        }
-
-        if (!finalText && res.ok) {
-          finalText = '(empty response)';
-        }
-
-        if (finalText) {
-          messages.push({ role: 'assistant', content: finalText });
-          var idx = messages.length - 1;
-          bubble.innerHTML = renderMarkdown(finalText);
-
-          var meta = document.createElement('div');
-          meta.className = 'meta';
-          var t = document.createElement('span');
-          var secs = ((Date.now() - started) / 1000).toFixed(1);
-          t.textContent = nowTime() + ' · ' + secs + 's · ' + bytes(finalText.length);
-          var copy = document.createElement('button');
-          copy.textContent = 'copy';
-          copy.onclick = function () {
-            navigator.clipboard && navigator.clipboard.writeText(finalText);
-            copy.textContent = 'copied';
-            setTimeout(function () { copy.textContent = 'copy'; }, 1200);
-          };
-          var retry = document.createElement('button');
-          retry.textContent = 'retry';
-          retry.onclick = function () {
-            messages = messages.slice(0, idx);
-            resendLast();
-          };
-          meta.appendChild(t);
-          meta.appendChild(copy);
-          meta.appendChild(retry);
-          bubble.parentNode.appendChild(meta);
-
-          persistSession();
+          var msg = res.error || errorFromBody(res.raw, res.status);
+          hint(msg, true);
+          bubble.innerHTML = '<span style="color:var(--danger)">' + esc(msg) + '</span>' +
+            '<div class="meta"><span>model id / credits / base URL check karo</span></div>';
           scrollDown(true);
-        } else {
-          bubble.innerHTML = '<span style="color:var(--muted)">no response</span>';
+          return;
         }
-        if (gotAny) hint('');
+
+        var finalText = pendingText || reasoningText || textFromBody(res.raw);
+        if (!finalText) {
+          bubble.innerHTML = '<span style="color:var(--muted)">empty response — model ne kuch return nahi kiya</span>' +
+            '<div class="meta"><span>maybe non-chat model, wrong id, or blocked</span></div>';
+          hint('try another model', true);
+          scrollDown(true);
+          return;
+        }
+
+        messages.push({ role: 'assistant', content: finalText });
+        bubble.innerHTML = renderMarkdown(finalText);
+        attachMeta(bubble, started, finalText, messages.length - 1);
+        persistSession();
+        scrollDown(true);
+        hint('');
       }
     );
   }
@@ -678,7 +738,7 @@
         if (!msg) return finish('', 'empty response');
 
         var calls = TOOLS_API.parseToolCalls(msg);
-        if (!calls.length) return finish(msg.content || '', null);
+        if (!calls.length) return finish(msg.content || msg.reasoning_content || msg.reasoning || '', null);
 
         convo.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls });
         runTool(calls, 0);
@@ -939,6 +999,14 @@
 
   // test hooks (node)
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { parseStreamLine: parseStreamLine, renderMarkdown: renderMarkdown, buildPayload: buildPayload, settings: DEFAULTS, presets: PRESETS };
+    module.exports = {
+      parseStreamLine: parseStreamLine,
+      renderMarkdown: renderMarkdown,
+      buildPayload: buildPayload,
+      textFromBody: textFromBody,
+      errorFromBody: errorFromBody,
+      settings: DEFAULTS,
+      presets: PRESETS
+    };
   }
 })();
